@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: befree
+---
+# Dev credentials only; prod overrides this Secret out-of-band, never in git
+apiVersion: v1
+kind: Secret
+metadata:
+  name: befree-db
+  namespace: befree
+type: Opaque
+stringData:
+  user: befree
+  password: befree-dev-only
