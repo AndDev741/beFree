@@ -1,7 +1,7 @@
 package org.beFree.transaction;
-import org.beFree.category.Category;
 
 import io.quarkus.panache.common.Sort;
+import jakarta.inject.Inject;
 import jakarta.transaction.Transactional;
 import jakarta.ws.rs.BadRequestException;
 import jakarta.ws.rs.Consumes;
@@ -13,8 +13,6 @@ import jakarta.ws.rs.QueryParam;
 import jakarta.ws.rs.core.MediaType;
 import org.jboss.resteasy.reactive.RestResponse;
 
-import java.math.BigDecimal;
-import java.time.LocalDate;
 import java.time.YearMonth;
 import java.time.format.DateTimeParseException;
 import java.util.List;
@@ -24,32 +22,23 @@ import java.util.List;
 @Consumes(MediaType.APPLICATION_JSON)
 public class TransactionResource {
 
+    @Inject
+    TransactionService transactions;
+
     @POST
-    @Transactional
     public RestResponse<TransactionResponse> create(TransactionRequest req) {
-        if (req == null || req.amount() == null || req.amount().compareTo(BigDecimal.ZERO) <= 0) {
-            throw new BadRequestException("amount is required and must be positive");
+        if (req == null) {
+            throw new BadRequestException("body is required");
         }
-
-        Transaction t = new Transaction();
-        t.amount = req.amount();
-        t.type = req.type() != null ? req.type() : TransactionType.EXPENSE;
-        t.currency = req.currency() != null ? req.currency() : "EUR";
-        t.occurredOn = req.occurredOn() != null ? req.occurredOn() : LocalDate.now();
-        t.description = req.description();
-        t.source = Source.MANUAL;
-
-        if (req.categoryId() != null) {
-            Category category = Category.findById(req.categoryId());
-            if (category == null) {
-                throw new BadRequestException("unknown category: " + req.categoryId());
-            }
-            t.category = category;
+        try {
+            Transaction t = transactions.record(new NewTransaction(
+                    req.amount(), req.type(), req.currency(), req.occurredOn(),
+                    req.description(), req.categoryId(),
+                    Source.MANUAL, null, null));
+            return RestResponse.status(RestResponse.Status.CREATED, TransactionResponse.from(t));
+        } catch (IllegalArgumentException e) {
+            throw new BadRequestException(e.getMessage());
         }
-
-        // Flush so @CreationTimestamp is populated before the response is built
-        t.persistAndFlush();
-        return RestResponse.status(RestResponse.Status.CREATED, TransactionResponse.from(t));
     }
 
     @GET
