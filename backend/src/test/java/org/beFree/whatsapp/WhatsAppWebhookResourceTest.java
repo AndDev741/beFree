@@ -12,12 +12,8 @@ import org.eclipse.microprofile.rest.client.inject.RestClient;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 
-import javax.crypto.Mac;
-import javax.crypto.spec.SecretKeySpec;
 import java.math.BigDecimal;
-import java.nio.charset.StandardCharsets;
 import java.time.LocalDate;
-import java.util.HexFormat;
 import java.util.Map;
 
 import static io.restassured.RestAssured.given;
@@ -40,34 +36,23 @@ class WhatsAppWebhookResourceTest {
                     "whatsapp.access-token", "test-token",
                     "whatsapp.phone-number-id", "111",
                     "whatsapp.verify-token", "verify-me",
-                    "whatsapp.app-secret", "test-secret",
-                    "whatsapp.allowed-phones", "351911111111");
+                    "whatsapp.app-secret", WhatsAppFixtures.APP_SECRET,
+                    "whatsapp.allowed-phones", WhatsAppFixtures.ME);
         }
     }
 
-    private static final String ME = "351911111111";
-    private static final String TS_2026_09_01 = "1788264000";
+    private static final String ME = WhatsAppFixtures.ME;
 
     @InjectMock
     @RestClient
     WhatsAppApi whatsapp;
 
-    // Real Meta payloads carry more (metadata, contacts, statuses); some is kept to prove it's ignored
     private static String payload(String from, String wamid, String text) {
-        return """
-                {"object":"whatsapp_business_account","entry":[{"id":"1","changes":[{"field":"messages","value":{
-                  "messaging_product":"whatsapp",
-                  "metadata":{"display_phone_number":"15550001111","phone_number_id":"111"},
-                  "contacts":[{"profile":{"name":"And"},"wa_id":"%s"}],
-                  "messages":[{"from":"%s","id":"%s","timestamp":"%s","type":"text","text":{"body":"%s"}}]
-                }}]}]}
-                """.formatted(from, from, wamid, TS_2026_09_01, text);
+        return WhatsAppFixtures.payload(from, wamid, text);
     }
 
-    private static String sign(String body) throws Exception {
-        Mac mac = Mac.getInstance("HmacSHA256");
-        mac.init(new SecretKeySpec("test-secret".getBytes(StandardCharsets.UTF_8), "HmacSHA256"));
-        return "sha256=" + HexFormat.of().formatHex(mac.doFinal(body.getBytes(StandardCharsets.UTF_8)));
+    private static String sign(String body) {
+        return WhatsAppFixtures.sign(body);
     }
 
     private static void post(String body, String signature) {
