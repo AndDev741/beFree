@@ -60,6 +60,7 @@ public class WhatsAppWebhookResource {
         }
 
         WebhookPayload payload = mapper.readValue(rawBody, WebhookPayload.class);
+        LOG.infof("WhatsApp webhook received: %d entries", payload.entry() != null ? payload.entry().size() : 0);
         if (payload.entry() != null) {
             for (Entry entry : payload.entry()) {
                 if (entry.changes() == null) continue;

@@ -81,6 +81,7 @@ public class WhatsAppService {
                 p.amount(), p.type(), null, occurredOn, p.description(), categoryId,
                 Source.WHATSAPP, message.id(), text));
 
+        LOG.infof("Recorded WhatsApp transaction #%d (%s %s) from %s", t.id, t.amount, t.currency, from);
         String sign = t.type == TransactionType.INCOME ? "+" : "";
         reply(from, "✅ %s%s %s · %s%s (#%d)".formatted(
                 sign, t.amount.setScale(2, RoundingMode.HALF_UP), t.currency,
