@@ -28,6 +28,18 @@ final class WhatsAppFixtures {
                 """.formatted(from, from, wamid, TS_2026_09_01, text);
     }
 
+    static String imagePayload(String from, String wamid, String mediaId, String caption) {
+        String captionField = caption == null ? "" : ",\"caption\":\"" + caption + "\"";
+        return """
+                {"object":"whatsapp_business_account","entry":[{"id":"1","changes":[{"field":"messages","value":{
+                  "messaging_product":"whatsapp",
+                  "metadata":{"display_phone_number":"15550001111","phone_number_id":"111"},
+                  "messages":[{"from":"%s","id":"%s","timestamp":"%s","type":"image",
+                               "image":{"id":"%s","mime_type":"image/jpeg","sha256":"abc"%s}}]
+                }}]}]}
+                """.formatted(from, wamid, TS_2026_09_01, mediaId, captionField);
+    }
+
     static String sign(String body) {
         try {
             Mac mac = Mac.getInstance("HmacSHA256");

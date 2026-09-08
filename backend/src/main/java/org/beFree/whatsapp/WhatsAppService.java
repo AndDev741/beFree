@@ -5,9 +5,11 @@ import io.quarkus.arc.ManagedContext;
 import io.quarkus.narayana.jta.QuarkusTransaction;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
+import dev.langchain4j.data.image.Image;
 import org.beFree.assistant.ConversationContext;
 import org.beFree.assistant.FinanceAssistant;
 import org.beFree.assistant.ProcessedMessage;
+import org.beFree.assistant.VisionReader;
 import org.beFree.category.Category;
 import org.beFree.chat.MessageParser;
 import org.beFree.transaction.NewTransaction;
@@ -25,6 +27,7 @@ import java.math.RoundingMode;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
+import java.util.Base64;
 import java.util.List;
 import java.util.Optional;
 
@@ -58,14 +61,23 @@ public class WhatsAppService {
     @Inject
     ConversationContext context;
 
+    @Inject
+    VisionReader vision;
+
+    @Inject
+    WhatsAppMedia media;
+
+    @Inject
+    Transcriber transcriber;
+
     @ConfigProperty(name = "quarkus.langchain4j.openai.api-key")
     Optional<String> llmApiKey;
 
     public void handle(InboundMessage message) {
-        if (!"text".equals(message.type()) || message.text() == null) {
+        String from = message.from();
+        if (from == null || message.id() == null) {
             return;
         }
-        String from = message.from();
 
         // Unknown senders get silence, not a reply: no hint that a bot lives here
         if (!isAllowed(from)) {
@@ -74,6 +86,10 @@ public class WhatsAppService {
         }
         if (!claim(message.id())) {
             LOG.infof("WhatsApp message %s already processed; ignoring redelivery", message.id());
+            return;
+        }
+        if (!isText(message) && !isImage(message) && !isAudio(message)) {
+            reply(from, "For now I understand text, images and voice messages. PDFs are coming.");
             return;
         }
 
@@ -105,13 +121,17 @@ public class WhatsAppService {
     /** Runs the assistant (or the parser) and sends the reply. Package-private for tests. */
     void process(InboundMessage message) {
         String from = message.from();
-        String text = message.text().body();
         String reply;
 
-        if (assistantEnabled()) {
+        if (isImage(message)) {
+            reply = processImage(message);
+        } else if (isAudio(message)) {
+            reply = processAudio(message);
+        } else if (assistantEnabled()) {
+            String text = message.text().body();
             context.open(Source.WHATSAPP, message.id(), text);
             try {
-                reply = assistant.chat(from, LocalDate.now(ZoneId.of(config.zone())).toString(), text);
+                reply = assistant.chat(from, today(), text);
             } catch (Exception e) {
                 LOG.warnf(e, "Assistant failed for message %s; falling back to the parser", message.id());
                 reply = parseAndRecord(message);
@@ -125,6 +145,90 @@ public class WhatsAppService {
         if (reply != null && !reply.isBlank()) {
             reply(from, reply);
         }
+    }
+
+    /** Image → vision model → plain lines → the regular assistant, which records with the usual rules. */
+    private String processImage(InboundMessage message) {
+        if (!assistantEnabled()) {
+            return "Reading images needs the AI assistant, which is not configured yet.";
+        }
+        String caption = message.image().caption() == null ? "" : message.image().caption().trim();
+
+        String extraction;
+        try {
+            var file = media.download(message.image().id());
+            Image image = Image.builder()
+                    .base64Data(Base64.getEncoder().encodeToString(file.bytes()))
+                    .mimeType(file.mimeType())
+                    .build();
+            extraction = vision.extract(image, caption);
+        } catch (Exception e) {
+            LOG.warnf(e, "Could not read image %s", message.id());
+            return "I couldn't read that image. Try a clearer photo, or type the amount.";
+        }
+        LOG.infof("Vision extraction for %s: %s", message.id(), extraction.replace('\n', '|'));
+
+        String forAssistant = "[The user sent an image" + (caption.isEmpty() ? "" : " with the caption: \"" + caption + "\"") + "]\n"
+                + "Extracted from the image:\n" + extraction;
+
+        context.open(Source.WHATSAPP, message.id(), forAssistant);
+        try {
+            return assistant.chat(message.from(), today(), forAssistant);
+        } catch (Exception e) {
+            LOG.warnf(e, "Assistant failed on image message %s", message.id());
+            return "I read the image but couldn't record it right now. Here is what I saw:\n" + extraction;
+        } finally {
+            context.close();
+        }
+    }
+
+    /** Voice note → transcription provider → the regular assistant. */
+    private String processAudio(InboundMessage message) {
+        if (!transcriber.enabled()) {
+            return "Voice messages need a transcription provider, which is not configured yet. Type it instead for now.";
+        }
+        if (!assistantEnabled()) {
+            return "Voice messages need the AI assistant, which is not configured yet.";
+        }
+        String transcript;
+        try {
+            var file = media.download(message.audio().id());
+            transcript = transcriber.transcribe(file.bytes(), file.mimeType());
+        } catch (Exception e) {
+            LOG.warnf(e, "Could not transcribe audio %s", message.id());
+            return "I couldn't understand that voice message. Try again or type it.";
+        }
+        if (transcript == null || transcript.isBlank()) {
+            return "The voice message came through empty. Try again or type it.";
+        }
+        LOG.infof("Transcript for %s: %s", message.id(), transcript);
+
+        String forAssistant = "[Voice message transcript]\n" + transcript.trim();
+        context.open(Source.WHATSAPP, message.id(), forAssistant);
+        try {
+            return assistant.chat(message.from(), today(), forAssistant);
+        } catch (Exception e) {
+            LOG.warnf(e, "Assistant failed on voice message %s", message.id());
+            return "I heard: \"" + transcript.trim() + "\" but couldn't record it right now.";
+        } finally {
+            context.close();
+        }
+    }
+
+    private String today() {
+        return LocalDate.now(ZoneId.of(config.zone())).toString();
+    }
+
+    private static boolean isText(InboundMessage m) {
+        return "text".equals(m.type()) && m.text() != null && m.text().body() != null;
+    }
+
+    private static boolean isImage(InboundMessage m) {
+        return "image".equals(m.type()) && m.image() != null && m.image().id() != null;
+    }
+
+    private static boolean isAudio(InboundMessage m) {
+        return "audio".equals(m.type()) && m.audio() != null && m.audio().id() != null;
     }
 
     private boolean assistantEnabled() {

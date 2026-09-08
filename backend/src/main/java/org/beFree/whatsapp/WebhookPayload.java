@@ -1,5 +1,6 @@
 package org.beFree.whatsapp;
 
+import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import io.quarkus.runtime.annotations.RegisterForReflection;
 
@@ -30,11 +31,25 @@ public record WebhookPayload(String object, List<Entry> entry) {
                         List<InboundMessage> messages) {
     }
 
+    /** type is "text", "image", "document", "audio", ...; only the matching field is set. */
     @RegisterForReflection
-    public record InboundMessage(String from, String id, String timestamp, String type, Text text) {
+    public record InboundMessage(String from, String id, String timestamp, String type,
+                                 Text text, Media image, Media document, Media audio) {
+
+        @JsonCreator
+        public InboundMessage {
+        }
+
+        public InboundMessage(String from, String id, String timestamp, String type, Text text) {
+            this(from, id, timestamp, type, text, null, null, null);
+        }
     }
 
     @RegisterForReflection
     public record Text(String body) {
+    }
+
+    @RegisterForReflection
+    public record Media(String id, @JsonProperty("mime_type") String mimeType, String caption, String filename) {
     }
 }

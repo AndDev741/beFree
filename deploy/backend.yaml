@@ -65,6 +65,11 @@ spec:
             - name: QUARKUS_LANGCHAIN4J_OPENAI_API_KEY
               valueFrom:
                 secretKeyRef: { name: befree-deepseek, key: api-key, optional: true }
+            # Voice notes (Groq/OpenAI Whisper). Optional:
+            #   kubectl -n befree create secret generic befree-transcription --from-literal=api-key=<gsk_...>
+            - name: BEFREE_TRANSCRIPTION_API_KEY
+              valueFrom:
+                secretKeyRef: { name: befree-transcription, key: api-key, optional: true }
           resources:
             requests: { memory: 64Mi, cpu: 100m }
             limits: { memory: 160Mi }

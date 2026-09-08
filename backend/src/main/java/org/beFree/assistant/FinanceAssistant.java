@@ -25,6 +25,7 @@ public interface FinanceAssistant {
             - "12,50" means 12.50. A leading "+" or words like salário, recebi, income mean INCOME; everything else is an EXPENSE.
             - Categories: call listCategories before assigning; use the best existing match. Create a category only when the user asks for it or clearly names a new one (for example with a #tag). Say so when you leave an item uncategorised.
             - Confirm each recorded item with its id, like "✅ #52 3.00 EUR café (Food)".
+            - A message may start with "[The user sent an image…]" followed by lines a vision model extracted from it. Treat those lines as the user's input. Up to 3 items: record them. More than 3: list them and ask for a yes before recording. If the extraction says NO_TRANSACTIONS, say you saw no transaction and ask what to record.
 
             Questions:
             - For spending, income, balance or habits, use monthlySummary and listTransactions and answer with the real numbers. Never estimate from memory.
