@@ -70,6 +70,9 @@ public class WhatsAppService {
     @Inject
     Transcriber transcriber;
 
+    @Inject
+    DocumentReader documents;
+
     @ConfigProperty(name = "quarkus.langchain4j.openai.api-key")
     Optional<String> llmApiKey;
 
@@ -88,8 +91,8 @@ public class WhatsAppService {
             LOG.infof("WhatsApp message %s already processed; ignoring redelivery", message.id());
             return;
         }
-        if (!isText(message) && !isImage(message) && !isAudio(message)) {
-            reply(from, "For now I understand text, images and voice messages. PDFs are coming.");
+        if (!isText(message) && !isImage(message) && !isAudio(message) && !isDocument(message)) {
+            reply(from, "For now I understand text, images, voice messages and PDF documents.");
             return;
         }
 
@@ -143,6 +146,8 @@ public class WhatsAppService {
             reply = processImage(message);
         } else if (isAudio(message)) {
             reply = processAudio(message);
+        } else if (isDocument(message)) {
+            reply = processDocument(message);
         } else if (assistantEnabled()) {
             String text = message.text().body();
             context.open(Source.WHATSAPP, message.id(), text);
@@ -232,6 +237,50 @@ public class WhatsAppService {
         }
     }
 
+    /** PDF → text → the assistant, which must summarise and ask before importing anything. */
+    private String processDocument(InboundMessage message) {
+        var doc = message.document();
+        String name = doc.filename() == null ? "document" : doc.filename();
+        boolean pdf = (doc.mimeType() != null && doc.mimeType().toLowerCase().startsWith("application/pdf"))
+                || name.toLowerCase().endsWith(".pdf");
+        if (!pdf) {
+            return "I can only read PDF documents for now (this one is " + (doc.mimeType() == null ? "unknown" : doc.mimeType()) + ").";
+        }
+        if (!assistantEnabled()) {
+            return "Reading documents needs the AI assistant, which is not configured yet.";
+        }
+
+        DocumentReader.Extracted extracted;
+        try {
+            var file = media.download(doc.id());
+            extracted = documents.extract(file.bytes());
+        } catch (Exception e) {
+            LOG.warnf(e, "Could not read PDF %s (%s)", message.id(), name);
+            return "I couldn't open that PDF. If it is password-protected, remove the password and send it again.";
+        }
+        if (extracted.isBlank()) {
+            return "That PDF has no readable text (probably a scan). Send screenshots of the pages instead and I'll read those.";
+        }
+        LOG.infof("PDF %s: %s, %d pages, %d chars%s", message.id(), name, extracted.pages(),
+                extracted.text().length(), extracted.truncated() ? " (truncated)" : "");
+
+        String caption = doc.caption() == null ? "" : doc.caption().trim();
+        String forAssistant = "[The user sent a PDF document \"" + name + "\" (" + extracted.pages() + " pages"
+                + (extracted.truncated() ? ", text truncated" : "") + ")"
+                + (caption.isEmpty() ? "" : " with the caption: \"" + caption + "\"") + "]\n"
+                + "Extracted text:\n" + extracted.text();
+
+        context.open(Source.WHATSAPP, message.id(), forAssistant);
+        try {
+            return assistant.chat(message.from(), today(), forAssistant);
+        } catch (Exception e) {
+            LOG.warnf(e, "Assistant failed on document %s", message.id());
+            return "I read the PDF (" + extracted.pages() + " pages) but couldn't process it right now. Please try again.";
+        } finally {
+            context.close();
+        }
+    }
+
     private String today() {
         return LocalDate.now(ZoneId.of(config.zone())).toString();
     }
@@ -246,6 +295,10 @@ public class WhatsAppService {
 
     private static boolean isAudio(InboundMessage m) {
         return "audio".equals(m.type()) && m.audio() != null && m.audio().id() != null;
+    }
+
+    private static boolean isDocument(InboundMessage m) {
+        return "document".equals(m.type()) && m.document() != null && m.document().id() != null;
     }
 
     private boolean assistantEnabled() {

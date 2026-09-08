@@ -111,13 +111,13 @@ class WhatsAppImageFlowTest {
 
     @Test
     void unsupportedTypesAreAnsweredNotIgnored() {
-        var doc = new InboundMessage(ME, "wamid.DOC1", WhatsAppFixtures.TS_2026_09_01, "document",
-                null, null, new Media("m", "application/pdf", null, "extrato.pdf"), null);
-        new WhatsAppServiceAccessor().handle(doc);
+        var sticker = new InboundMessage(ME, "wamid.STK1", WhatsAppFixtures.TS_2026_09_01, "sticker",
+                null, null, null, null);
+        new WhatsAppServiceAccessor().handle(sticker);
 
         var reply = ArgumentCaptor.forClass(SendTextRequest.class);
         verify(whatsapp).sendMessage(any(), any(), reply.capture());
-        assertTrue(reply.getValue().text().body().contains("PDFs are coming"));
+        assertTrue(reply.getValue().text().body().contains("text, images, voice messages and PDF"));
         verifyNoInteractions(assistant, vision, media);
     }
 
