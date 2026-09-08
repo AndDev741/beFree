@@ -13,6 +13,7 @@ import org.beFree.transaction.Transaction;
 import org.beFree.transaction.TransactionService;
 import org.beFree.transaction.TransactionType;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
+import org.jboss.logging.Logger;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -29,6 +30,10 @@ import java.util.Map;
  */
 @ApplicationScoped
 public class FinanceTools {
+
+    private static final Logger LOG = Logger.getLogger(FinanceTools.class);
+    /** Sanity ceiling: a personal ledger has no single 1,000,000 EUR line; anything above is a mis-parse. */
+    private static final BigDecimal MAX_AMOUNT = new BigDecimal("1000000");
 
     @Inject
     TransactionService transactions;
@@ -47,6 +52,18 @@ public class FinanceTools {
             @P("Short description; null if the user gave none") String description,
             @P("Name of an existing category, or null to leave uncategorised") String categoryName,
             @P("Date as yyyy-MM-dd, or null for today") String date) {
+
+        LOG.infof("tool recordTransaction(amount=%s, type=%s, description=%s, category=%s, date=%s)",
+                amount, type, description, categoryName, date);
+        if (amount == null || amount.signum() <= 0) {
+            return "ERROR: amount must be a positive number";
+        }
+        if (amount.compareTo(MAX_AMOUNT) > 0) {
+            return "ERROR: amount " + amount + " is implausibly large for one transaction; re-read the message and ask the user if unsure";
+        }
+        if (amount.scale() > 2) {
+            amount = amount.setScale(2, java.math.RoundingMode.HALF_UP);
+        }
 
         Long categoryId = null;
         if (categoryName != null && !categoryName.isBlank()) {
@@ -74,7 +91,12 @@ public class FinanceTools {
                     scope.map(ConversationContext.Scope::rawInput).orElse(null)));
         } catch (IllegalArgumentException e) {
             return "ERROR: " + e.getMessage();
+        } catch (Exception e) {
+            // Never let a raw persistence error reach the model; it can only act on text
+            LOG.warnf(e, "recordTransaction failed");
+            return "ERROR: could not save the transaction (" + e.getClass().getSimpleName() + ")";
         }
+        LOG.infof("Recorded transaction #%d via assistant (%s %s %s)", t.id, t.type, t.amount, t.currency);
         return "Recorded #%d: %s %s %s on %s%s".formatted(
                 t.id, t.type, t.amount, t.currency, t.occurredOn,
                 t.category != null ? " in category " + t.category.name : ", uncategorised");
@@ -82,6 +104,7 @@ public class FinanceTools {
 
     @Tool("List every existing category name")
     public String listCategories() {
+        LOG.info("tool listCategories()");
         List<Category> all = Category.listAll(Sort.by("name"));
         if (all.isEmpty()) {
             return "No categories exist yet.";
@@ -92,6 +115,7 @@ public class FinanceTools {
     @Tool("Create a new category")
     @Transactional
     public String createCategory(@P("Category name") String name) {
+        LOG.infof("tool createCategory(%s)", name);
         if (name == null || name.isBlank()) {
             return "ERROR: name is required";
         }
@@ -107,6 +131,7 @@ public class FinanceTools {
 
     @Tool("Monthly summary: expenses by category, total income, total expenses and balance")
     public String monthlySummary(@P("Month as yyyy-MM, or null for the current month") String month) {
+        LOG.infof("tool monthlySummary(%s)", month);
         YearMonth ym;
         try {
             ym = (month == null || month.isBlank()) ? YearMonth.now(ZoneId.of(zone)) : YearMonth.parse(month.trim());
@@ -151,6 +176,7 @@ public class FinanceTools {
     public String listTransactions(
             @P("Month as yyyy-MM, or null for the current month") String month,
             @P("Maximum number of rows, or null for 10") Integer limit) {
+        LOG.infof("tool listTransactions(%s, %s)", month, limit);
         YearMonth ym;
         try {
             ym = (month == null || month.isBlank()) ? YearMonth.now(ZoneId.of(zone)) : YearMonth.parse(month.trim());
@@ -173,6 +199,7 @@ public class FinanceTools {
     @Tool("Change the category of an existing transaction")
     @Transactional
     public String setCategory(@P("Transaction id") long transactionId, @P("Existing category name") String categoryName) {
+        LOG.infof("tool setCategory(#%d, %s)", transactionId, categoryName);
         Transaction t = Transaction.findById(transactionId);
         if (t == null) {
             return "ERROR: transaction #" + transactionId + " not found";
@@ -188,6 +215,7 @@ public class FinanceTools {
     @Tool("Delete a transaction, for example to undo a mistake")
     @Transactional
     public String deleteTransaction(@P("Transaction id") long transactionId) {
+        LOG.infof("tool deleteTransaction(#%d)", transactionId);
         Transaction t = Transaction.findById(transactionId);
         if (t == null) {
             return "ERROR: transaction #" + transactionId + " not found";
