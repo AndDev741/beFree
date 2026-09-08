@@ -130,6 +130,6 @@ class WhatsAppWebhookResourceTest {
         post(body, sign(body));
 
         assertEquals(1, Transaction.count("source = ?1 and externalId = ?2", Source.WHATSAPP, "wamid.D4"));
-        verify(whatsapp, org.mockito.Mockito.times(2)).sendMessage(any(), any(), any());
+        verify(whatsapp, org.mockito.Mockito.times(1)).sendMessage(any(), any(), any());
     }
 }
