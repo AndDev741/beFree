@@ -1,5 +1,7 @@
 package org.beFree.whatsapp;
 
+import io.quarkus.arc.Arc;
+import io.quarkus.arc.ManagedContext;
 import io.quarkus.narayana.jta.QuarkusTransaction;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
@@ -76,9 +78,27 @@ public class WhatsAppService {
         }
 
         if (config.asyncProcessing()) {
-            Thread.ofVirtual().name("whatsapp-" + message.id()).start(() -> process(message));
+            Thread.ofVirtual().name("whatsapp-" + message.id()).start(() -> withRequestContext(() -> process(message)));
         } else {
-            process(message);
+            withRequestContext(() -> process(message));
+        }
+    }
+
+    /**
+     * Hibernate needs a request context (or a transaction) on the calling thread.
+     * The virtual thread we hand off to has neither, so give it one for the turn.
+     */
+    private static void withRequestContext(Runnable work) {
+        ManagedContext requestContext = Arc.container().requestContext();
+        if (requestContext.isActive()) {
+            work.run();
+            return;
+        }
+        requestContext.activate();
+        try {
+            work.run();
+        } finally {
+            requestContext.terminate();
         }
     }
 
