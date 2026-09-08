@@ -122,6 +122,22 @@ public class WhatsAppService {
     void process(InboundMessage message) {
         String from = message.from();
         String reply;
+        try {
+            reply = route(message);
+        } catch (Exception e) {
+            // A turn that dies without a reply looks like silence to the user; never allow that
+            LOG.errorf(e, "Unhandled failure processing WhatsApp message %s", message.id());
+            reply = "Something went wrong on my side handling that message. Please try again.";
+        }
+
+        if (reply != null && !reply.isBlank()) {
+            reply(from, reply);
+        }
+    }
+
+    private String route(InboundMessage message) {
+        String from = message.from();
+        String reply;
 
         if (isImage(message)) {
             reply = processImage(message);
@@ -141,10 +157,7 @@ public class WhatsAppService {
         } else {
             reply = parseAndRecord(message);
         }
-
-        if (reply != null && !reply.isBlank()) {
-            reply(from, reply);
-        }
+        return reply;
     }
 
     /** Image → vision model → plain lines → the regular assistant, which records with the usual rules. */
@@ -165,6 +178,10 @@ public class WhatsAppService {
         } catch (Exception e) {
             LOG.warnf(e, "Could not read image %s", message.id());
             return "I couldn't read that image. Try a clearer photo, or type the amount.";
+        }
+        if (extraction == null || extraction.isBlank()) {
+            LOG.warnf("Vision model returned no text for image %s", message.id());
+            return "I couldn't read anything useful in that image. Try a clearer photo, or type the amount.";
         }
         LOG.infof("Vision extraction for %s: %s", message.id(), extraction.replace('\n', '|'));
 

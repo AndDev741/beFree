@@ -95,6 +95,21 @@ class WhatsAppImageFlowTest {
     }
 
     @Test
+    void emptyVisionResultGetsAnHonestReply() throws Exception {
+        when(media.download("media-3")).thenReturn(new Downloaded(new byte[]{1}, "image/jpeg"));
+        when(vision.extract(any(), anyString())).thenReturn(null);
+
+        String body = WhatsAppFixtures.imagePayload(ME, "wamid.IMG3", "media-3", null);
+        given().contentType(ContentType.JSON).header("X-Hub-Signature-256", WhatsAppFixtures.sign(body)).body(body)
+                .when().post("/webhooks/whatsapp").then().statusCode(200);
+
+        verifyNoInteractions(assistant);
+        var reply = ArgumentCaptor.forClass(SendTextRequest.class);
+        verify(whatsapp).sendMessage(any(), any(), reply.capture());
+        assertTrue(reply.getValue().text().body().startsWith("I couldn't read anything useful"));
+    }
+
+    @Test
     void unsupportedTypesAreAnsweredNotIgnored() {
         var doc = new InboundMessage(ME, "wamid.DOC1", WhatsAppFixtures.TS_2026_09_01, "document",
                 null, null, new Media("m", "application/pdf", null, "extrato.pdf"), null);
