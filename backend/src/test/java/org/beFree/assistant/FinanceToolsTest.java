@@ -79,4 +79,27 @@ class FinanceToolsTest {
         assertTrue(tools.deleteTransaction(id).startsWith("Deleted"));
         assertTrue(tools.deleteTransaction(id).startsWith("ERROR"));
     }
+
+    @Test
+    void categoriesCanBeRenamedMergedAndDeleted() {
+        tools.createCategory("Transporte");
+        tools.createCategory("Uber");
+        context.open(Source.WHATSAPP, "wamid.TOOLS4", "test");
+        String a = tools.recordTransaction(new BigDecimal("9"), TransactionType.EXPENSE, "uber", "Uber", "2026-05-02");
+        long id = Long.parseLong(a.substring(a.indexOf('#') + 1, a.indexOf(':')));
+
+        assertTrue(tools.renameCategory("Uber", "Boleias").startsWith("Renamed"));
+        assertTrue(tools.renameCategory("Boleias", "Transporte").startsWith("ERROR"));
+        assertTrue(tools.listCategories().contains("Boleias"));
+
+        String merged = tools.deleteCategory("Boleias", "Transporte");
+        assertTrue(merged.contains("1 transactions moved to 'Transporte'"), merged);
+        assertTrue(tools.listTransactions("2026-05", 10).contains("[Transporte]"));
+        assertTrue(tools.deleteCategory("Boleias", null).startsWith("ERROR"));
+
+        assertTrue(tools.updateTransaction(id, new BigDecimal("9.50"), "uber para casa", "2026-05-03").startsWith("Updated #" + id));
+        String after = tools.listTransactions("2026-05", 10);
+        assertTrue(after.contains("2026-05-03 EXPENSE 9.50 uber para casa"), after);
+        assertTrue(tools.updateTransaction(id, new BigDecimal("-1"), null, null).startsWith("ERROR"));
+    }
 }

@@ -27,6 +27,10 @@ import java.util.Map;
 /**
  * What the assistant can do. Every method returns plain text the model reads
  * back; errors are returned as text too so the model can recover or ask.
+ *
+ * Every tool, reads included, is @Transactional: a transactional call gets its
+ * own Hibernate session, so a read right after a write in the same turn sees
+ * the committed row instead of a stale instance cached in the request session.
  */
 @ApplicationScoped
 public class FinanceTools {
@@ -103,6 +107,7 @@ public class FinanceTools {
     }
 
     @Tool("List every existing category name")
+    @Transactional
     public String listCategories() {
         LOG.info("tool listCategories()");
         List<Category> all = Category.listAll(Sort.by("name"));
@@ -130,6 +135,7 @@ public class FinanceTools {
     }
 
     @Tool("Monthly summary: expenses by category, total income, total expenses and balance")
+    @Transactional
     public String monthlySummary(@P("Month as yyyy-MM, or null for the current month") String month) {
         LOG.infof("tool monthlySummary(%s)", month);
         YearMonth ym;
@@ -173,6 +179,7 @@ public class FinanceTools {
     }
 
     @Tool("List a month's transactions, newest first")
+    @Transactional
     public String listTransactions(
             @P("Month as yyyy-MM, or null for the current month") String month,
             @P("Maximum number of rows, or null for 10") Integer limit) {
@@ -183,7 +190,7 @@ public class FinanceTools {
         } catch (DateTimeParseException e) {
             return "ERROR: month must be yyyy-MM";
         }
-        int max = (limit == null || limit <= 0) ? 10 : Math.min(limit, 50);
+        int max = (limit == null || limit <= 0) ? 10 : Math.min(limit, 200);
         List<Transaction> list = Transaction.inMonth(ym);
         if (list.isEmpty()) {
             return "No transactions in " + ym + ".";
@@ -210,6 +217,89 @@ public class FinanceTools {
         }
         t.category = category.get();
         return "Transaction #%d is now in category %s.".formatted(t.id, t.category.name);
+    }
+
+    @Tool("Rename an existing category; transactions keep pointing at it")
+    @Transactional
+    public String renameCategory(@P("Current name") String currentName, @P("New name") String newName) {
+        LOG.infof("tool renameCategory(%s -> %s)", currentName, newName);
+        if (newName == null || newName.isBlank()) {
+            return "ERROR: new name is required";
+        }
+        var category = Category.findByName(currentName == null ? "" : currentName.trim());
+        if (category.isEmpty()) {
+            return "ERROR: category '" + currentName + "' does not exist";
+        }
+        String clean = newName.trim();
+        var clash = Category.findByName(clean);
+        if (clash.isPresent() && !clash.get().id.equals(category.get().id)) {
+            return "ERROR: a category named '" + clean + "' already exists; use deleteCategory with moveToCategory to merge them";
+        }
+        String old = category.get().name;
+        category.get().name = clean;
+        return "Renamed category '" + old + "' to '" + clean + "'.";
+    }
+
+    @Tool("Delete a category. Its transactions move to moveToCategory, or become uncategorised when that is null")
+    @Transactional
+    public String deleteCategory(@P("Category to delete") String name,
+                                 @P("Existing category to move its transactions to, or null") String moveToCategory) {
+        LOG.infof("tool deleteCategory(%s, moveTo=%s)", name, moveToCategory);
+        var category = Category.findByName(name == null ? "" : name.trim());
+        if (category.isEmpty()) {
+            return "ERROR: category '" + name + "' does not exist";
+        }
+        Category target = null;
+        if (moveToCategory != null && !moveToCategory.isBlank()) {
+            var found = Category.findByName(moveToCategory.trim());
+            if (found.isEmpty()) {
+                return "ERROR: target category '" + moveToCategory + "' does not exist";
+            }
+            target = found.get();
+            if (target.id.equals(category.get().id)) {
+                return "ERROR: cannot move a category's transactions into itself";
+            }
+        }
+        List<Transaction> affected = Transaction.list("category", category.get());
+        for (Transaction t : affected) {
+            t.category = target;
+        }
+        long moved = affected.size();
+        String deletedName = category.get().name;
+        category.get().delete();
+        return "Deleted category '%s'; %d transactions %s.".formatted(deletedName, moved,
+                target == null ? "are now uncategorised" : "moved to '" + target.name + "'");
+    }
+
+    @Tool("Edit an existing transaction's amount, description or date; null leaves a field unchanged")
+    @Transactional
+    public String updateTransaction(@P("Transaction id") long transactionId,
+                                    @P("New positive amount, or null") BigDecimal amount,
+                                    @P("New description, or null") String description,
+                                    @P("New date yyyy-MM-dd, or null") String date) {
+        LOG.infof("tool updateTransaction(#%d, amount=%s, description=%s, date=%s)", transactionId, amount, description, date);
+        Transaction t = Transaction.findById(transactionId);
+        if (t == null) {
+            return "ERROR: transaction #" + transactionId + " not found";
+        }
+        if (amount != null) {
+            if (amount.signum() <= 0 || amount.compareTo(MAX_AMOUNT) > 0) {
+                return "ERROR: amount must be positive and plausible";
+            }
+            t.amount = amount.setScale(2, java.math.RoundingMode.HALF_UP);
+        }
+        if (description != null && !description.isBlank()) {
+            t.description = description.trim();
+        }
+        if (date != null && !date.isBlank()) {
+            try {
+                t.occurredOn = LocalDate.parse(date.trim());
+            } catch (DateTimeParseException e) {
+                return "ERROR: date must be yyyy-MM-dd";
+            }
+        }
+        return "Updated #%d: %s %s %s on %s%s".formatted(t.id, t.type, t.amount, t.currency, t.occurredOn,
+                t.category != null ? " in category " + t.category.name : "");
     }
 
     @Tool("Delete a transaction, for example to undo a mistake")
