@@ -2,11 +2,11 @@ package org.beFree.whatsapp;
 
 import io.quarkus.test.InjectMock;
 import io.quarkus.test.junit.QuarkusTest;
-import io.quarkus.test.junit.QuarkusTestProfile;
 import io.quarkus.test.junit.TestProfile;
 import jakarta.inject.Inject;
 import org.beFree.assistant.FinanceAssistant;
-import org.beFree.whatsapp.DocumentReader.Extracted;
+import org.beFree.media.DocumentReader;
+import org.beFree.media.DocumentReader.Extracted;
 import org.beFree.whatsapp.WebhookPayload.InboundMessage;
 import org.beFree.whatsapp.WebhookPayload.Media;
 import org.beFree.whatsapp.WhatsAppApi.SendTextRequest;
@@ -15,7 +15,6 @@ import org.eclipse.microprofile.rest.client.inject.RestClient;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 
-import java.util.Map;
 
 import static org.beFree.whatsapp.WhatsAppFixtures.ME;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -28,21 +27,9 @@ import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 @QuarkusTest
-@TestProfile(WhatsAppDocumentFlowTest.AssistantOn.class)
+@TestProfile(AssistantOnProfile.class)
 class WhatsAppDocumentFlowTest {
 
-    public static class AssistantOn implements QuarkusTestProfile {
-        @Override
-        public Map<String, String> getConfigOverrides() {
-            return Map.of(
-                    "quarkus.langchain4j.openai.api-key", "test-key",
-                    "whatsapp.access-token", "test-token",
-                    "whatsapp.phone-number-id", "111",
-                    "whatsapp.verify-token", "verify-me",
-                    "whatsapp.app-secret", WhatsAppFixtures.APP_SECRET,
-                    "whatsapp.allowed-phones", ME);
-        }
-    }
 
     @InjectMock
     FinanceAssistant assistant;

@@ -2,7 +2,6 @@ package org.beFree.whatsapp;
 
 import io.quarkus.test.InjectMock;
 import io.quarkus.test.junit.QuarkusTest;
-import io.quarkus.test.junit.QuarkusTestProfile;
 import io.quarkus.test.junit.TestProfile;
 import io.restassured.http.ContentType;
 import org.beFree.assistant.FinanceAssistant;
@@ -16,7 +15,6 @@ import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 
 import java.nio.charset.StandardCharsets;
-import java.util.Map;
 
 import static io.restassured.RestAssured.given;
 import static org.beFree.whatsapp.WhatsAppFixtures.ME;
@@ -31,21 +29,9 @@ import static org.mockito.Mockito.when;
 
 /** Vision model, assistant and media download are mocked; this covers the wiring between them. */
 @QuarkusTest
-@TestProfile(WhatsAppImageFlowTest.AssistantOn.class)
+@TestProfile(AssistantOnProfile.class)
 class WhatsAppImageFlowTest {
 
-    public static class AssistantOn implements QuarkusTestProfile {
-        @Override
-        public Map<String, String> getConfigOverrides() {
-            return Map.of(
-                    "quarkus.langchain4j.openai.api-key", "test-key",
-                    "whatsapp.access-token", "test-token",
-                    "whatsapp.phone-number-id", "111",
-                    "whatsapp.verify-token", "verify-me",
-                    "whatsapp.app-secret", WhatsAppFixtures.APP_SECRET,
-                    "whatsapp.allowed-phones", ME);
-        }
-    }
 
     @InjectMock
     FinanceAssistant assistant;
@@ -91,7 +77,7 @@ class WhatsAppImageFlowTest {
         verifyNoInteractions(assistant, vision);
         var reply = ArgumentCaptor.forClass(SendTextRequest.class);
         verify(whatsapp).sendMessage(any(), any(), reply.capture());
-        assertTrue(reply.getValue().text().body().startsWith("I couldn't read that image"));
+        assertEquals(WhatsAppService.IMAGE_UNREADABLE, reply.getValue().text().body());
     }
 
     @Test
@@ -106,7 +92,7 @@ class WhatsAppImageFlowTest {
         verifyNoInteractions(assistant);
         var reply = ArgumentCaptor.forClass(SendTextRequest.class);
         verify(whatsapp).sendMessage(any(), any(), reply.capture());
-        assertTrue(reply.getValue().text().body().startsWith("I couldn't read anything useful"));
+        assertEquals(WhatsAppService.IMAGE_UNREADABLE, reply.getValue().text().body());
     }
 
     @Test

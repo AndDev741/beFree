@@ -1,4 +1,4 @@
-package org.beFree.whatsapp;
+package org.beFree.media;
 
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.pdmodel.PDPage;

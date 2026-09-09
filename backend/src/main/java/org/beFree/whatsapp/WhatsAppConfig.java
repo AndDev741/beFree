@@ -25,9 +25,6 @@ public interface WhatsAppConfig {
     /** Senders allowed to log transactions, international format without "+". */
     Optional<List<String>> allowedPhones();
 
-    @WithDefault("Europe/Lisbon")
-    String zone();
-
     /** Ack Meta at once and process on a virtual thread; tests turn this off. */
     @WithDefault("true")
     boolean asyncProcessing();

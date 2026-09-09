@@ -1,4 +1,4 @@
-package org.beFree.assistant;
+package org.beFree.whatsapp;
 
 import io.quarkus.hibernate.orm.panache.PanacheEntityBase;
 import jakarta.persistence.Column;

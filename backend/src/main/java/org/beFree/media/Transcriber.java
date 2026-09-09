@@ -1,4 +1,4 @@
-package org.beFree.whatsapp;
+package org.beFree.media;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.enterprise.context.ApplicationScoped;

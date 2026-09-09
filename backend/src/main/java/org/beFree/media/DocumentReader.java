@@ -1,4 +1,4 @@
-package org.beFree.whatsapp;
+package org.beFree.media;
 
 import jakarta.enterprise.context.ApplicationScoped;
 import org.apache.pdfbox.Loader;

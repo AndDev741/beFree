@@ -28,17 +28,6 @@ spec:
               valueFrom:
                 secretKeyRef: { name: befree-db, key: password }
             # Created out-of-band, never committed:
-            #   kubectl -n befree create secret generic befree-telegram \
-            #     --from-literal=bot-token=<BotFather token> \
-            #     --from-literal=allowed-chat-ids=<your chat id>
-            # Optional so the backend runs (poller off) when the secret is absent.
-            - name: TELEGRAM_BOT_TOKEN
-              valueFrom:
-                secretKeyRef: { name: befree-telegram, key: bot-token, optional: true }
-            - name: TELEGRAM_ALLOWED_CHAT_IDS
-              valueFrom:
-                secretKeyRef: { name: befree-telegram, key: allowed-chat-ids, optional: true }
-            # WhatsApp Cloud API, same pattern:
             #   kubectl -n befree create secret generic befree-whatsapp \
             #     --from-literal=access-token=<System User token> \
             #     --from-literal=phone-number-id=<Phone number ID> \

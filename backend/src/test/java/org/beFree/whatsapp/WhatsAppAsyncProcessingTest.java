@@ -6,41 +6,39 @@ import io.quarkus.test.junit.QuarkusTestProfile;
 import io.quarkus.test.junit.TestProfile;
 import jakarta.inject.Inject;
 import org.beFree.assistant.FinanceAssistant;
-import org.beFree.transaction.Source;
-import org.beFree.transaction.Transaction;
+import org.beFree.assistant.FinanceTools;
 import org.beFree.whatsapp.WebhookPayload.InboundMessage;
 import org.beFree.whatsapp.WebhookPayload.Text;
+import org.beFree.whatsapp.WhatsAppApi.SendTextRequest;
 import org.eclipse.microprofile.rest.client.inject.RestClient;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 
 import java.util.Map;
-import java.util.Optional;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.fail;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.verify;
 
 /**
- * Production processes on a virtual thread with no request context. The parser
- * fallback with a #tag does a Panache read outside any transaction, which is
- * exactly what blew up in prod on 2026-09-08 ("Cannot use the EntityManager").
+ * Production processes on a virtual thread with no request context. The mocked
+ * model calls a real tool that reads the database, which is exactly what blew up
+ * in prod on 2026-09-08 ("Cannot use the EntityManager/Session…").
  */
 @QuarkusTest
 @TestProfile(WhatsAppAsyncProcessingTest.AsyncOn.class)
 class WhatsAppAsyncProcessingTest {
 
-    public static class AsyncOn implements QuarkusTestProfile {
+    public static class AsyncOn extends AssistantOnProfile {
         @Override
         public Map<String, String> getConfigOverrides() {
-            return Map.of(
-                    "whatsapp.async-processing", "true",
-                    "quarkus.langchain4j.openai.api-key", "test-key",
-                    "whatsapp.access-token", "test-token",
-                    "whatsapp.phone-number-id", "111",
-                    "whatsapp.verify-token", "verify-me",
-                    "whatsapp.app-secret", WhatsAppFixtures.APP_SECRET,
-                    "whatsapp.allowed-phones", WhatsAppFixtures.ME);
+            var map = new java.util.HashMap<>(super.getConfigOverrides());
+            map.put("whatsapp.async-processing", "true");
+            return map;
         }
     }
 
@@ -52,26 +50,23 @@ class WhatsAppAsyncProcessingTest {
     WhatsAppApi whatsapp;
 
     @Inject
+    FinanceTools tools;
+
+    @Inject
     WhatsAppService service;
 
     @Test
-    void backgroundThreadCanReadTheDatabase() throws Exception {
-        when(assistant.chat(any(), any(), any())).thenThrow(new RuntimeException("force the parser path"));
+    void backgroundThreadCanUseTheDatabaseThroughTools() throws Exception {
+        CountDownLatch replied = new CountDownLatch(1);
+        doAnswer(inv -> "Categories: " + tools.listCategories()).when(assistant).chat(any(), any(), any());
+        doAnswer(inv -> { replied.countDown(); return null; }).when(whatsapp).sendMessage(any(), any(), any());
 
-        service.handle(new InboundMessage(WhatsAppFixtures.ME, "wamid.ASYNC1", WhatsAppFixtures.TS_2026_09_01,
-                "text", new Text("4 café #Transport")));
+        service.handle(new InboundMessage(WhatsAppFixtures.ME, "wamid.ASYNC1", WhatsAppFixtures.TS_2026_09_01, "text", new Text("quais categorias tenho?")));
 
-        long deadline = System.currentTimeMillis() + 10_000;
-        Optional<Transaction> stored;
-        do {
-            stored = Transaction.bySourceRef(Source.WHATSAPP, "wamid.ASYNC1");
-            if (stored.isPresent()) break;
-            Thread.sleep(100);
-        } while (System.currentTimeMillis() < deadline);
-
-        if (stored.isEmpty()) {
-            fail("transaction was not recorded by the background thread within 10s");
-        }
-        assertEquals("café", stored.get().description);
+        assertTrue(replied.await(10, TimeUnit.SECONDS), "no reply was sent by the background thread within 10s");
+        var reply = ArgumentCaptor.forClass(SendTextRequest.class);
+        verify(whatsapp).sendMessage(any(), any(), reply.capture());
+        assertTrue(reply.getValue().text().body().startsWith("Categories: "), reply.getValue().text().body());
+        assertEquals(WhatsAppFixtures.ME, reply.getValue().to());
     }
 }

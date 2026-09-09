@@ -57,7 +57,7 @@ public class Transaction extends PanacheEntity {
     @Column(name = "external_id")
     public String externalId;
 
-    // Original Telegram message, kept verbatim for parser debugging
+    // Original chat message (or media extraction), kept verbatim for debugging the assistant
     @Column(columnDefinition = "text")
     public String rawInput;
 

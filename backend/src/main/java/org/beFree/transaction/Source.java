@@ -1,8 +1,8 @@
 package org.beFree.transaction;
 
+/** Where a transaction entered the system. */
 public enum Source {
     MANUAL,
-    TELEGRAM,
     WHATSAPP,
     OPEN_BANKING
 }
