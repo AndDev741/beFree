@@ -375,7 +375,7 @@ public class WhatsAppService {
             return;
         }
         try {
-            whatsapp.sendMessage(phoneNumberId.get(), "Bearer " + token.get(), SendTextRequest.text(to, text));
+            whatsapp.sendMessage(phoneNumberId.get(), "Bearer " + token.get(), SendTextRequest.text(to, WhatsAppText.format(text)));
         } catch (Exception e) {
             LOG.warnf(e, "Failed to send WhatsApp reply to %s", to);
         }
