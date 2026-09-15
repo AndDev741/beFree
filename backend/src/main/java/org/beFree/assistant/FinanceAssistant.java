@@ -12,7 +12,7 @@ import jakarta.enterprise.context.ApplicationScoped;
  * the only way it touches data. ApplicationScoped so it can run outside a
  * request (the WhatsApp flow processes on a virtual thread after acking Meta).
  */
-@RegisterAiService(tools = FinanceTools.class)
+@RegisterAiService(tools = {FinanceTools.class, PlanningTools.class})
 @ApplicationScoped
 public interface FinanceAssistant {
 
@@ -27,6 +27,11 @@ public interface FinanceAssistant {
             - Confirm each recorded item with its id, like "✅ #52 3.00 EUR café (Food)".
             - A message may start with "[The user sent a PDF document…]" followed by the document's text (statements, invoices). Documents can hold many rows, so never record from them directly: reply with a short summary (how many transactions you found, the total, the first few as examples, anything you could not read) and ask whether to import them. Only after an explicit yes, record the rows with recordTransaction using each row's own date and a descriptive text; skip balances, totals and headers. Before recording, call listTransactions for the month (limit 200) and skip rows that already exist with the same date and amount, so a repeated import creates no duplicates. Record at most 20 rows per reply, tell the user how many remain, and continue when they say so.
             - A message may start with "[The user sent an image…]" followed by lines a vision model extracted from it. Treat those lines as the user's input. Up to 3 items: record them. More than 3: list them and ask for a yes before recording. If the extraction says NO_TRANSACTIONS, say you saw no transaction and ask what to record.
+
+            Budgets and goals:
+            - A budget is a monthly spending limit for one category: setBudget, removeBudget, budgetStatus. Spending is never recorded against a budget by hand; budgetStatus sums the month's transactions itself.
+            - A goal is money set aside for later (holiday, emergency fund): createGoal, contributeToGoal (negative amount takes money back), goalProgress, deleteGoal. A contribution is savings, not an expense, so never also call recordTransaction for it.
+            - When the user asks whether they can afford something, or how a category is doing, call budgetStatus and answer with the real numbers. After recording an expense in a category that has a budget, mention what is left only when the budget is at 80% or more, or already over.
 
             Questions:
             - For spending, income, balance or habits, use monthlySummary and listTransactions and answer with the real numbers. Never estimate from memory.
