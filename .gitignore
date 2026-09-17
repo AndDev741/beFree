@@ -1,2 +1,5 @@
 # Quarkus CLI local plugin catalog
 .quarkus/
+
+# Dumps da base de dados de produção: dados financeiros reais
+backups/

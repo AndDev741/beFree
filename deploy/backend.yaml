@@ -59,6 +59,17 @@ spec:
             - name: BEFREE_TRANSCRIPTION_API_KEY
               valueFrom:
                 secretKeyRef: { name: befree-transcription, key: api-key, optional: true }
+            # Login password and the key that signs the session cookie. Without the
+            # key, every restart logs you out:
+            #   kubectl -n befree create secret generic befree-auth \
+            #     --from-literal=password='<your password>' \
+            #     --from-literal=session-key="$(openssl rand -base64 32)"
+            - name: BEFREE_PASSWORD
+              valueFrom:
+                secretKeyRef: { name: befree-auth, key: password, optional: true }
+            - name: BEFREE_SESSION_KEY
+              valueFrom:
+                secretKeyRef: { name: befree-auth, key: session-key, optional: true }
           resources:
             requests: { memory: 64Mi, cpu: 100m }
             limits: { memory: 160Mi }
@@ -73,10 +84,10 @@ metadata:
   name: befree-backend
   namespace: befree
 spec:
-  type: NodePort
+  # Reached only through the nginx pod; 30080 on the node now belongs to it
+  type: ClusterIP
   selector:
     app: befree-backend
   ports:
     - port: 80
       targetPort: 8080
-      nodePort: 30080

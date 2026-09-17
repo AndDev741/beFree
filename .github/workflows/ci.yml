@@ -5,14 +5,19 @@ on:
     branches: [main]
     paths:
       - "backend/**"
+      - "frontend/**"
+      - "deploy/**"
       - ".github/workflows/ci.yml"
   pull_request:
     paths:
       - "backend/**"
+      - "frontend/**"
+      - "deploy/**"
       - ".github/workflows/ci.yml"
 
 env:
   IMAGE: ghcr.io/anddev741/befree-backend
+  FRONTEND_IMAGE: ghcr.io/anddev741/befree-frontend
 
 jobs:
   test:
@@ -70,3 +75,39 @@ jobs:
             -t "$IMAGE:${GITHUB_SHA::7}" -t "$IMAGE:latest" .
           docker push "$IMAGE:${GITHUB_SHA::7}"
           docker push "$IMAGE:latest"
+
+  frontend:
+    name: Frontend build and image
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      packages: write
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+      # tsc runs first, so a type error fails here and never reaches the server
+      - run: npm run build
+
+      - name: Log in to GHCR
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push image
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: |
+          docker build -t "$FRONTEND_IMAGE:${GITHUB_SHA::7}" -t "$FRONTEND_IMAGE:latest" .
+          docker push "$FRONTEND_IMAGE:${GITHUB_SHA::7}"
+          docker push "$FRONTEND_IMAGE:latest"
