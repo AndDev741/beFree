@@ -1,15 +1,13 @@
 package org.beFree.whatsapp;
 
-import dev.langchain4j.data.image.Image;
 import io.quarkus.arc.Arc;
 import io.quarkus.arc.ManagedContext;
 import io.quarkus.narayana.jta.QuarkusTransaction;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import org.beFree.assistant.AssistantService;
-import org.beFree.assistant.VisionReader;
-import org.beFree.media.DocumentReader;
-import org.beFree.media.Transcriber;
+import org.beFree.auth.CurrentUser;
+import org.beFree.media.MediaIngest;
 import org.beFree.transaction.Source;
 import org.beFree.whatsapp.WebhookPayload.InboundMessage;
 import org.beFree.whatsapp.WebhookPayload.Media;
@@ -18,7 +16,6 @@ import org.eclipse.microprofile.rest.client.inject.RestClient;
 import org.jboss.logging.Logger;
 
 import java.time.Instant;
-import java.util.Base64;
 import java.util.List;
 
 /**
@@ -31,14 +28,15 @@ public class WhatsAppService {
 
     private static final Logger LOG = Logger.getLogger(WhatsAppService.class);
 
-    static final String NOT_CONFIGURED = "The assistant is not configured yet, so I couldn't record that.";
-    static final String TRY_AGAIN = "I couldn't process that right now. Please try again in a moment.";
-    static final String UNSUPPORTED = "I understand text, images, voice messages and PDF documents.";
-    static final String IMAGE_UNREADABLE = "I couldn't read that image. Try a clearer photo, or type the amount.";
-    static final String AUDIO_NOT_CONFIGURED = "Voice messages need a transcription provider, which is not configured yet. Type it instead for now.";
-    static final String AUDIO_UNREADABLE = "I couldn't understand that voice message. Try again or type it.";
-    static final String PDF_UNREADABLE = "I couldn't open that PDF. If it is password-protected, remove the password and send it again.";
-    static final String PDF_NO_TEXT = "That PDF has no readable text (probably a scan). Send screenshots of the pages instead and I'll read those.";
+    static final String NOT_CONFIGURED = "O assistente ainda não está configurado, por isso não registei nada.";
+    static final String TRY_AGAIN = "Não consegui processar isso agora. Tenta daqui a bocado.";
+    // The rest of the wording is shared with the in-app chat
+    static final String UNSUPPORTED = MediaIngest.UNSUPPORTED;
+    static final String IMAGE_UNREADABLE = MediaIngest.IMAGE_UNREADABLE;
+    static final String AUDIO_NOT_CONFIGURED = MediaIngest.AUDIO_NOT_CONFIGURED;
+    static final String AUDIO_UNREADABLE = MediaIngest.AUDIO_UNREADABLE;
+    static final String PDF_UNREADABLE = MediaIngest.PDF_UNREADABLE;
+    static final String PDF_NO_TEXT = MediaIngest.PDF_NO_TEXT;
 
     @Inject
     WhatsAppConfig config;
@@ -54,13 +52,10 @@ public class WhatsAppService {
     AssistantService assistant;
 
     @Inject
-    VisionReader vision;
+    CurrentUser currentUser;
 
     @Inject
-    Transcriber transcriber;
-
-    @Inject
-    DocumentReader documents;
+    MediaIngest ingest;
 
     public void handle(InboundMessage message) {
         if (message.from() == null || message.id() == null) {
@@ -113,7 +108,7 @@ public class WhatsAppService {
 
     private String converse(InboundMessage message, String userText) {
         try {
-            return assistant.chat(message.from(), Source.WHATSAPP, message.id(), userText);
+            return assistant.chat(currentUser.name(), Source.WHATSAPP, message.id(), userText);
         } catch (Exception e) {
             LOG.warnf(e, "Assistant failed for message %s", message.id());
             return TRY_AGAIN;
@@ -123,78 +118,56 @@ public class WhatsAppService {
     /** Photo or screenshot → vision model → transaction lines → the assistant. */
     private String image(InboundMessage message) {
         Media image = message.image();
-        String caption = caption(image);
-        String extraction;
+        MediaIngest.Result read;
         try {
             var file = media.download(image.id());
-            extraction = vision.extract(Image.builder()
-                    .base64Data(Base64.getEncoder().encodeToString(file.bytes()))
-                    .mimeType(file.mimeType())
-                    .build(), caption);
+            read = ingest.image(file.bytes(), file.mimeType(), caption(image), message.id());
         } catch (Exception e) {
-            LOG.warnf(e, "Could not read image %s", message.id());
+            LOG.warnf(e, "Could not download image %s", message.id());
             return IMAGE_UNREADABLE;
         }
-        if (extraction == null || extraction.isBlank()) {
-            LOG.warnf("Vision model returned no text for image %s", message.id());
-            return IMAGE_UNREADABLE;
-        }
-        LOG.infof("Vision extraction for %s: %s", message.id(), extraction.replace('\n', '|'));
-
-        String framed = "[The user sent an image" + (caption.isEmpty() ? "" : " with the caption: \"" + caption + "\"") + "]\n"
-                + "Extracted from the image:\n" + extraction;
-        return converse(message, framed);
+        return converse(message, read);
     }
 
     /** Voice note → transcription → the assistant. */
     private String audio(InboundMessage message) {
-        if (!transcriber.enabled()) {
+        if (!ingest.canTranscribe()) {
             return AUDIO_NOT_CONFIGURED;
         }
-        String transcript;
+        MediaIngest.Result read;
         try {
             var file = media.download(message.audio().id());
-            transcript = transcriber.transcribe(file.bytes(), file.mimeType());
+            read = ingest.audio(file.bytes(), file.mimeType(), message.id());
         } catch (Exception e) {
-            LOG.warnf(e, "Could not transcribe audio %s", message.id());
+            LOG.warnf(e, "Could not download audio %s", message.id());
             return AUDIO_UNREADABLE;
         }
-        if (transcript == null || transcript.isBlank()) {
-            return AUDIO_UNREADABLE;
-        }
-        LOG.infof("Transcript for %s: %s", message.id(), transcript);
-        return converse(message, "[Voice message transcript]\n" + transcript.trim());
+        return converse(message, read);
     }
 
     /** PDF → text → the assistant, which summarises and asks before importing. */
     private String document(InboundMessage message) {
         Media doc = message.document();
         String name = doc.filename() == null ? "document" : doc.filename();
-        boolean pdf = (doc.mimeType() != null && doc.mimeType().toLowerCase().startsWith("application/pdf"))
-                || name.toLowerCase().endsWith(".pdf");
-        if (!pdf) {
-            return "I can only read PDF documents for now (this one is " + (doc.mimeType() == null ? "unknown" : doc.mimeType()) + ").";
+        if (ingest.kindOf(doc.mimeType(), name) != MediaIngest.Kind.DOCUMENT) {
+            return "Por agora só leio PDFs (este é " + (doc.mimeType() == null ? "de tipo desconhecido" : doc.mimeType()) + ").";
         }
-        DocumentReader.Extracted extracted;
+        MediaIngest.Result read;
         try {
             var file = media.download(doc.id());
-            extracted = documents.extract(file.bytes());
+            read = ingest.document(file.bytes(), name, caption(doc), message.id());
         } catch (Exception e) {
-            LOG.warnf(e, "Could not read PDF %s (%s)", message.id(), name);
+            LOG.warnf(e, "Could not download PDF %s (%s)", message.id(), name);
             return PDF_UNREADABLE;
         }
-        if (extracted.isBlank()) {
-            return PDF_NO_TEXT;
-        }
-        LOG.infof("PDF %s: %s, %d pages, %d chars%s", message.id(), name, extracted.pages(),
-                extracted.text().length(), extracted.truncated() ? " (truncated)" : "");
+        return converse(message, read);
+    }
 
-        String caption = caption(doc);
-        String framed = "[The user sent a PDF document \"" + name + "\" (" + extracted.pages() + " pages"
-                + (extracted.truncated() ? ", text truncated" : "") + ")"
-                + (caption.isEmpty() ? "" : " with the caption: \"" + caption + "\"") + "]\n"
-                + "Extracted text:\n" + extracted.text();
-        return converse(message, framed);
+    private String converse(InboundMessage message, MediaIngest.Result read) {
+        return switch (read) {
+            case MediaIngest.Result.Framed(String text) -> converse(message, text);
+            case MediaIngest.Result.Rejected(String reason) -> reason;
+        };
     }
 
     private static String caption(Media media) {

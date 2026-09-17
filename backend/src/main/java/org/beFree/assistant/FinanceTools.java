@@ -5,6 +5,7 @@ import dev.langchain4j.agent.tool.Tool;
 import io.quarkus.panache.common.Sort;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
+import org.beFree.auth.CurrentUser;
 import jakarta.transaction.Transactional;
 import org.beFree.category.Category;
 import org.beFree.transaction.NewTransaction;
@@ -44,6 +45,9 @@ public class FinanceTools {
 
     @Inject
     ConversationContext context;
+
+    @Inject
+    CurrentUser currentUser;
 
     @ConfigProperty(name = "befree.zone", defaultValue = "Europe/Lisbon")
     String zone;
@@ -130,6 +134,7 @@ public class FinanceTools {
         }
         Category c = new Category();
         c.name = clean;
+        c.owner = currentUser.name();
         c.persist();
         return "Created category '" + clean + "'.";
     }

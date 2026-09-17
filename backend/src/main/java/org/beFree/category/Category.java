@@ -14,6 +14,10 @@ public class Category extends PanacheEntity {
     @Column(nullable = false, unique = true)
     public String name;
 
+    /** Row owner. One user today; see CurrentUser for why the column exists now. */
+    @Column(nullable = false, length = 64)
+    public String owner;
+
     public static Optional<Category> findByName(String name) {
         return find("lower(name) = ?1", name.toLowerCase()).firstResultOptional();
     }

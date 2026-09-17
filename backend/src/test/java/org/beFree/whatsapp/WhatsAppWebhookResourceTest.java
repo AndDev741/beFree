@@ -29,6 +29,9 @@ import static org.mockito.Mockito.when;
 @TestProfile(AssistantOnProfile.class)
 class WhatsAppWebhookResourceTest {
 
+    /** The assistant thread is keyed by the owner, so app and WhatsApp share one conversation. */
+    private static final String OWNER = "andre";
+
     @InjectMock
     FinanceAssistant assistant;
 
@@ -64,7 +67,7 @@ class WhatsAppWebhookResourceTest {
 
     @Test
     void signedTextReachesTheAssistantAndTheReplyGoesBack() {
-        when(assistant.chat(eq(ME), anyString(), eq("12,50 almoço"))).thenReturn("✅ #1 12.50 EUR almoço");
+        when(assistant.chat(eq(OWNER), anyString(), eq("12,50 almoço"))).thenReturn("✅ #1 12.50 EUR almoço");
 
         String body = payload(ME, "wamid.A1", "12,50 almoço");
         post(body, sign(body), 200);

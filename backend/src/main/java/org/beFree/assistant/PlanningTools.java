@@ -4,6 +4,7 @@ import dev.langchain4j.agent.tool.P;
 import dev.langchain4j.agent.tool.Tool;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
+import org.beFree.auth.CurrentUser;
 import jakarta.transaction.Transactional;
 import org.beFree.budget.BudgetService;
 import org.beFree.category.Category;
@@ -35,6 +36,9 @@ public class PlanningTools {
 
     @Inject
     GoalService goals;
+
+    @Inject
+    CurrentUser currentUser;
 
     @ConfigProperty(name = "befree.zone", defaultValue = "Europe/Lisbon")
     String zone;
@@ -148,6 +152,7 @@ public class PlanningTools {
                 return "ERROR: target date must be yyyy-MM-dd";
             }
         }
+        goal.owner = currentUser.name();
         goal.persist();
         return "Created goal '%s': target %s EUR%s.".formatted(
                 goal.name, goal.target, goal.targetDate == null ? "" : " by " + goal.targetDate);

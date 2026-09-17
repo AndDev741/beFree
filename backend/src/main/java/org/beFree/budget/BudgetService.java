@@ -1,6 +1,8 @@
 package org.beFree.budget;
 
 import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.inject.Inject;
+import org.beFree.auth.CurrentUser;
 import jakarta.transaction.Transactional;
 import org.beFree.category.Category;
 import org.beFree.transaction.Transaction;
@@ -18,6 +20,9 @@ import java.util.Optional;
 /** Reads budgets together with what was actually spent against them. */
 @ApplicationScoped
 public class BudgetService {
+
+    @Inject
+    CurrentUser currentUser;
 
     /**
      * @param spent     expenses recorded in the category that month
@@ -52,6 +57,7 @@ public class BudgetService {
         budget.category = category;
         budget.period = month.atDay(1);
         budget.limitAmount = limitAmount;
+        budget.owner = currentUser.name();
         budget.persist();
         return budget;
     }

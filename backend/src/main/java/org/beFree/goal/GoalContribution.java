@@ -30,4 +30,8 @@ public class GoalContribution extends PanacheEntity {
     public LocalDate occurredOn;
 
     public String note;
+
+    /** Row owner. One user today; see CurrentUser for why the column exists now. */
+    @Column(nullable = false, length = 64)
+    public String owner;
 }

@@ -13,10 +13,13 @@ import org.jboss.resteasy.reactive.RestResponse;
 
 import java.util.List;
 
-@Path("/categories")
+@Path("/api/categories")
 @Produces(MediaType.APPLICATION_JSON)
 @Consumes(MediaType.APPLICATION_JSON)
 public class CategoryResource {
+
+    @jakarta.inject.Inject
+    org.beFree.auth.CurrentUser currentUser;
 
     @GET
     public List<Category> list() {
@@ -30,6 +33,7 @@ public class CategoryResource {
             throw new BadRequestException("name is required");
         }
         category.id = null;
+        category.owner = currentUser.name();
         category.persist();
         return RestResponse.status(RestResponse.Status.CREATED, category);
     }

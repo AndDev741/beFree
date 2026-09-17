@@ -103,10 +103,13 @@ class BudgetAndGoalToolsTest {
         planning.createGoal("Fundo", new BigDecimal("100"), "2026-12-01", null);
         planning.contributeToGoal("Fundo", new BigDecimal("100"), "2026-09-01", null);
 
-        String progress = planning.goalProgress();
-        assertTrue(progress.contains("Fundo: 100.00 of 100.00"), progress);
-        assertTrue(progress.contains("reached"), progress);
-        assertFalse(progress.contains("per month"), progress);
+        // Scoped to this goal's own line: the listing is global and other tests add goals.
+        String fundoLine = planning.goalProgress().lines()
+                .filter(l -> l.startsWith("- Fundo:"))
+                .findFirst().orElseThrow();
+        assertTrue(fundoLine.contains("100.00 of 100.00"), fundoLine);
+        assertTrue(fundoLine.contains("reached"), fundoLine);
+        assertFalse(fundoLine.contains("per month"), fundoLine);
 
         String deleted = planning.deleteGoal("Fundo");
         assertTrue(deleted.contains("1 contributions"), deleted);

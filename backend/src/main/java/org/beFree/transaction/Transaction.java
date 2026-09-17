@@ -61,6 +61,10 @@ public class Transaction extends PanacheEntity {
     @Column(columnDefinition = "text")
     public String rawInput;
 
+    /** Row owner. One user today; see CurrentUser for why the column exists now. */
+    @Column(nullable = false, length = 64)
+    public String owner;
+
     @CreationTimestamp
     @Column(nullable = false, updatable = false)
     public Instant createdAt;

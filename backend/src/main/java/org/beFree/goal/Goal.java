@@ -33,6 +33,10 @@ public class Goal extends PanacheEntity {
     @Column(nullable = false, length = 3)
     public String currency = "EUR";
 
+    /** Row owner. One user today; see CurrentUser for why the column exists now. */
+    @Column(nullable = false, length = 64)
+    public String owner;
+
     public static Optional<Goal> findByName(String name) {
         return find("lower(name) = ?1", name.toLowerCase()).firstResultOptional();
     }

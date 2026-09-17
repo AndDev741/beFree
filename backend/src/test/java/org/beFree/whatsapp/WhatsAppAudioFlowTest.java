@@ -5,6 +5,7 @@ import io.quarkus.test.junit.QuarkusTest;
 import io.quarkus.test.junit.TestProfile;
 import jakarta.inject.Inject;
 import org.beFree.assistant.FinanceAssistant;
+import org.beFree.media.MediaIngest;
 import org.beFree.media.Transcriber;
 import org.beFree.whatsapp.WebhookPayload.InboundMessage;
 import org.beFree.whatsapp.WebhookPayload.Media;
@@ -28,6 +29,8 @@ import static org.mockito.Mockito.when;
 @QuarkusTest
 @TestProfile(AssistantOnProfile.class)
 class WhatsAppAudioFlowTest {
+
+    private static final String OWNER = "andre";
 
 
     @InjectMock
@@ -56,12 +59,12 @@ class WhatsAppAudioFlowTest {
         when(transcriber.enabled()).thenReturn(true);
         when(media.download("aud-1")).thenReturn(new Downloaded(new byte[]{1, 2, 3}, "audio/ogg; codecs=opus"));
         when(transcriber.transcribe(any(), anyString())).thenReturn("gastei doze euros e cinquenta no almoço");
-        when(assistant.chat(eq(ME), anyString(), anyString())).thenReturn("✅ #9 12.50 EUR almoço");
+        when(assistant.chat(eq(OWNER), anyString(), anyString())).thenReturn("✅ #9 12.50 EUR almoço");
 
         service.handle(voice("wamid.AUD1", "aud-1"));
 
         var toAssistant = ArgumentCaptor.forClass(String.class);
-        verify(assistant).chat(eq(ME), anyString(), toAssistant.capture());
+        verify(assistant).chat(eq(OWNER), anyString(), toAssistant.capture());
         assertEquals("[Voice message transcript]\ngastei doze euros e cinquenta no almoço", toAssistant.getValue());
         var reply = ArgumentCaptor.forClass(SendTextRequest.class);
         verify(whatsapp).sendMessage(any(), any(), reply.capture());
@@ -77,6 +80,6 @@ class WhatsAppAudioFlowTest {
         verifyNoInteractions(assistant, media);
         var reply = ArgumentCaptor.forClass(SendTextRequest.class);
         verify(whatsapp).sendMessage(any(), any(), reply.capture());
-        assertTrue(reply.getValue().text().body().contains("transcription provider"));
+        assertTrue(reply.getValue().text().body().contains(MediaIngest.AUDIO_NOT_CONFIGURED));
     }
 }

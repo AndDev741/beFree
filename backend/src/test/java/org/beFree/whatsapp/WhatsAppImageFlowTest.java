@@ -5,6 +5,7 @@ import io.quarkus.test.junit.QuarkusTest;
 import io.quarkus.test.junit.TestProfile;
 import io.restassured.http.ContentType;
 import org.beFree.assistant.FinanceAssistant;
+import org.beFree.media.MediaIngest;
 import org.beFree.assistant.VisionReader;
 import org.beFree.whatsapp.WebhookPayload.InboundMessage;
 import org.beFree.whatsapp.WebhookPayload.Media;
@@ -32,6 +33,8 @@ import static org.mockito.Mockito.when;
 @TestProfile(AssistantOnProfile.class)
 class WhatsAppImageFlowTest {
 
+    private static final String OWNER = "andre";
+
 
     @InjectMock
     FinanceAssistant assistant;
@@ -50,14 +53,14 @@ class WhatsAppImageFlowTest {
     void imageGoesThroughVisionThenTheAssistant() throws Exception {
         when(media.download("media-1")).thenReturn(new Downloaded("jpegbytes".getBytes(StandardCharsets.UTF_8), "image/jpeg"));
         when(vision.extract(any(), eq("almoço de hoje"))).thenReturn("12.50 EUR | EXPENSE | Restaurante Tia Alice | 2026-09-01");
-        when(assistant.chat(eq(ME), anyString(), anyString())).thenReturn("✅ #7 12.50 EUR Restaurante Tia Alice");
+        when(assistant.chat(eq(OWNER), anyString(), anyString())).thenReturn("✅ #7 12.50 EUR Restaurante Tia Alice");
 
         String body = WhatsAppFixtures.imagePayload(ME, "wamid.IMG1", "media-1", "almoço de hoje");
         given().contentType(ContentType.JSON).header("X-Hub-Signature-256", WhatsAppFixtures.sign(body)).body(body)
                 .when().post("/webhooks/whatsapp").then().statusCode(200);
 
         var toAssistant = ArgumentCaptor.forClass(String.class);
-        verify(assistant).chat(eq(ME), anyString(), toAssistant.capture());
+        verify(assistant).chat(eq(OWNER), anyString(), toAssistant.capture());
         assertTrue(toAssistant.getValue().startsWith("[The user sent an image with the caption: \"almoço de hoje\"]"), toAssistant.getValue());
         assertTrue(toAssistant.getValue().contains("12.50 EUR | EXPENSE | Restaurante Tia Alice"));
 
@@ -103,7 +106,7 @@ class WhatsAppImageFlowTest {
 
         var reply = ArgumentCaptor.forClass(SendTextRequest.class);
         verify(whatsapp).sendMessage(any(), any(), reply.capture());
-        assertTrue(reply.getValue().text().body().contains("text, images, voice messages and PDF"));
+        assertTrue(reply.getValue().text().body().contains(MediaIngest.UNSUPPORTED));
         verifyNoInteractions(assistant, vision, media);
     }
 

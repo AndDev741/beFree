@@ -1,6 +1,8 @@
 package org.beFree.goal;
 
 import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.inject.Inject;
+import org.beFree.auth.CurrentUser;
 import jakarta.transaction.Transactional;
 
 import java.math.BigDecimal;
@@ -15,6 +17,9 @@ import java.util.Map;
 /** Reads goals together with what has been put aside for them. */
 @ApplicationScoped
 public class GoalService {
+
+    @Inject
+    CurrentUser currentUser;
 
     public record Progress(Goal goal, BigDecimal saved) {
 
@@ -62,6 +67,7 @@ public class GoalService {
         c.amount = amount;
         c.occurredOn = occurredOn;
         c.note = note;
+        c.owner = currentUser.name();
         c.persist();
         return c;
     }

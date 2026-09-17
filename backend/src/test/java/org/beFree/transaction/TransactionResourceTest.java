@@ -1,6 +1,7 @@
 package org.beFree.transaction;
 
 import io.quarkus.test.junit.QuarkusTest;
+import io.quarkus.test.security.TestSecurity;
 import io.restassured.http.ContentType;
 import org.junit.jupiter.api.Test;
 
@@ -10,6 +11,7 @@ import static org.hamcrest.Matchers.is;
 import static org.hamcrest.Matchers.notNullValue;
 
 @QuarkusTest
+@TestSecurity(user = "andre", roles = "owner")
 class TransactionResourceTest {
 
     @Test
@@ -19,7 +21,7 @@ class TransactionResourceTest {
                 .body("""
                         {"amount": 12.50, "description": "almoço", "occurredOn": "2026-09-01"}
                         """)
-                .when().post("/transactions")
+                .when().post("/api/transactions")
                 .then()
                 .statusCode(201)
                 .body("id", notNullValue())
@@ -29,7 +31,7 @@ class TransactionResourceTest {
                 .body("createdAt", notNullValue());
 
         given()
-                .when().get("/transactions?month=2026-09")
+                .when().get("/api/transactions?month=2026-09")
                 .then()
                 .statusCode(200)
                 .body("size()", greaterThanOrEqualTo(1));
@@ -42,7 +44,7 @@ class TransactionResourceTest {
                 .body("""
                         {"name": "groceries"}
                         """)
-                .when().post("/categories")
+                .when().post("/api/categories")
                 .then()
                 .statusCode(201)
                 .extract().path("id");
@@ -52,7 +54,7 @@ class TransactionResourceTest {
                 .body("""
                         {"amount": 50, "categoryId": %d}
                         """.formatted(categoryId.longValue()))
-                .when().post("/transactions")
+                .when().post("/api/transactions")
                 .then()
                 .statusCode(201)
                 .body("category", is("groceries"));
@@ -65,7 +67,7 @@ class TransactionResourceTest {
                 .body("""
                         {"description": "sem valor"}
                         """)
-                .when().post("/transactions")
+                .when().post("/api/transactions")
                 .then()
                 .statusCode(400);
     }
@@ -73,7 +75,7 @@ class TransactionResourceTest {
     @Test
     void rejectsMalformedMonth() {
         given()
-                .when().get("/transactions?month=setembro")
+                .when().get("/api/transactions?month=setembro")
                 .then()
                 .statusCode(400);
     }

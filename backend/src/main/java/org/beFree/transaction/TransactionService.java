@@ -1,6 +1,8 @@
 package org.beFree.transaction;
 
 import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.inject.Inject;
+import org.beFree.auth.CurrentUser;
 import jakarta.transaction.Transactional;
 import org.beFree.category.Category;
 
@@ -9,6 +11,9 @@ import java.time.LocalDate;
 
 @ApplicationScoped
 public class TransactionService {
+
+    @Inject
+    CurrentUser currentUser;
 
     @Transactional
     public Transaction record(NewTransaction in) {
@@ -35,6 +40,7 @@ public class TransactionService {
         t.source = in.source();
         t.externalId = in.externalId();
         t.rawInput = in.rawInput();
+        t.owner = currentUser.name();
 
         if (in.categoryId() != null) {
             Category category = Category.findById(in.categoryId());
