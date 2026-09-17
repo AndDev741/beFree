@@ -11,6 +11,7 @@ import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.NewCookie;
 import jakarta.ws.rs.core.Response;
 import org.beFree.assistant.AssistantService;
+import org.jboss.resteasy.reactive.RestResponse;
 
 /** Lets the SPA ask "am I signed in?" without guessing from a 401 elsewhere. */
 @Path("/api")
@@ -23,14 +24,19 @@ public class SessionResource {
     @Inject
     AssistantService assistant;
 
+    /**
+     * Typed on purpose. A bare Response hides the body type, so the native
+     * image never registers it for reflection and every call 500s with
+     * "no serializer found" while JVM mode looks perfectly healthy.
+     */
     @GET
     @Path("/session")
     @PermitAll
-    public Response get() {
+    public RestResponse<Dto.Session> get() {
         if (identity == null || identity.isAnonymous()) {
-            return Response.status(Response.Status.UNAUTHORIZED).build();
+            return RestResponse.status(RestResponse.Status.UNAUTHORIZED);
         }
-        return Response.ok(new Dto.Session(identity.getPrincipal().getName(), assistant.enabled())).build();
+        return RestResponse.ok(new Dto.Session(identity.getPrincipal().getName(), assistant.enabled()));
     }
 
     /** Expires the session cookie; the browser then has nothing to send. */
