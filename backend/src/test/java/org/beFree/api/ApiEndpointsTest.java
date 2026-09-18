@@ -8,7 +8,6 @@ import org.junit.jupiter.api.Test;
 
 import static io.restassured.RestAssured.given;
 import static org.hamcrest.Matchers.hasSize;
-import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.hamcrest.Matchers.is;
 import static org.hamcrest.Matchers.notNullValue;
 import static org.hamcrest.Matchers.nullValue;
@@ -201,50 +200,6 @@ class ApiEndpointsTest {
                 .then().statusCode(400);
 
         given().when().delete("/api/goals/%d".formatted(id.longValue())).then().statusCode(204);
-    }
-
-    /**
-     * The carried balance reaches back over every month there has ever been, so
-     * other tests in this class sit behind it. Assert the property, not a
-     * hardcoded figure: what a month ends with is what the next one begins with.
-     */
-    @Test
-    void whatIsLeftOverShowsUpAtTheStartOfTheNextMonth() {
-        float aprilBefore = figure("2026-04", "remaining");
-
-        given().contentType(ContentType.JSON)
-                .body("{\"amount\":1000,\"type\":\"INCOME\",\"description\":\"ordenado abril\",\"occurredOn\":\"2026-04-02\"}")
-                .when().post("/api/transactions").then().statusCode(201);
-        given().contentType(ContentType.JSON)
-                .body("{\"amount\":250,\"description\":\"compras abril\",\"occurredOn\":\"2026-04-11\"}")
-                .when().post("/api/transactions").then().statusCode(201);
-
-        float april = figure("2026-04", "remaining");
-        assertEquals(aprilBefore + 750f, april, 0.005f);
-
-        // May opens with exactly what April closed with; 750 did not evaporate
-        assertEquals(april, figure("2026-05", "carried"), 0.005f);
-
-        float juneBefore = figure("2026-06", "carried");
-        given().contentType(ContentType.JSON)
-                .body("{\"amount\":100,\"description\":\"compras maio\",\"occurredOn\":\"2026-05-06\"}")
-                .when().post("/api/transactions").then().statusCode(201);
-        assertEquals(juneBefore - 100f, figure("2026-06", "carried"), 0.005f);
-
-        // Setting money aside for a goal leaves the pot too
-        float julyBefore = figure("2026-07", "carried");
-        Number goal = given().contentType(ContentType.JSON).body("{\"name\":\"Poupar junho\",\"target\":900}")
-                .when().post("/api/goals").then().statusCode(200).extract().path("id");
-        given().contentType(ContentType.JSON).body("{\"amount\":60,\"occurredOn\":\"2026-06-09\"}")
-                .when().post("/api/goals/%d/contributions".formatted(goal.longValue())).then().statusCode(200);
-        assertEquals(julyBefore - 60f, figure("2026-07", "carried"), 0.005f);
-
-        given().when().delete("/api/goals/%d".formatted(goal.longValue())).then().statusCode(204);
-    }
-
-    private static float figure(String month, String field) {
-        return ((Number) given().when().get("/api/summary?month=" + month)
-                .then().statusCode(200).extract().path(field)).floatValue();
     }
 
     @Test

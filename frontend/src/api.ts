@@ -47,8 +47,6 @@ export interface GoalView {
 
 export interface Summary {
   month: string;
-  /** What was left in the pot at the end of every month before this one. */
-  carried: number;
   income: number;
   spent: number;
   reserved: number;
