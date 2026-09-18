@@ -63,10 +63,11 @@ public class FinanceTools {
             @P("EXPENSE or INCOME") TransactionType type,
             @P("Short description; null if the user gave none") String description,
             @P("Name of an existing category, or null to leave uncategorised") String categoryName,
-            @P("Date as yyyy-MM-dd, or null for today") String date) {
+            @P("Date as yyyy-MM-dd, or null for today") String date,
+            @P("Name of a savings goal this expense was paid out of, or null when it came out of this month's money") String fromGoal) {
 
-        LOG.infof("tool recordTransaction(amount=%s, type=%s, description=%s, category=%s, date=%s)",
-                amount, type, description, categoryName, date);
+        LOG.infof("tool recordTransaction(amount=%s, type=%s, description=%s, category=%s, date=%s, fromGoal=%s)",
+                amount, type, description, categoryName, date, fromGoal);
         if (amount == null || amount.signum() <= 0) {
             return "ERROR: amount must be a positive number";
         }
@@ -93,11 +94,20 @@ public class FinanceTools {
             return "ERROR: date must be yyyy-MM-dd";
         }
 
+        Long goalId = null;
+        if (fromGoal != null && !fromGoal.isBlank()) {
+            var goal = org.beFree.goal.Goal.findByName(fromGoal.trim());
+            if (goal.isEmpty()) {
+                return "ERROR: goal '" + fromGoal + "' does not exist. Call goalProgress to see the goals.";
+            }
+            goalId = goal.get().id;
+        }
+
         var scope = context.current();
         Transaction t;
         try {
             t = transactions.record(new NewTransaction(
-                    amount, type, null, occurredOn, description, categoryId,
+                    amount, type, null, occurredOn, description, categoryId, goalId,
                     scope.map(ConversationContext.Scope::source).orElse(Source.MANUAL),
                     context.nextExternalId(),
                     scope.map(ConversationContext.Scope::rawInput).orElse(null)));
@@ -109,9 +119,10 @@ public class FinanceTools {
             return "ERROR: could not save the transaction (" + e.getClass().getSimpleName() + ")";
         }
         LOG.infof("Recorded transaction #%d via assistant (%s %s %s)", t.id, t.type, t.amount, t.currency);
-        return "Recorded #%d: %s %s %s on %s%s".formatted(
+        return "Recorded #%d: %s %s %s on %s%s%s".formatted(
                 t.id, t.type, t.amount, t.currency, t.occurredOn,
-                t.category != null ? " in category " + t.category.name : ", uncategorised");
+                t.category != null ? " in category " + t.category.name : ", uncategorised",
+                t.goal != null ? ", paid out of '" + t.goal.name + "'" : "");
     }
 
     @Tool("List every existing category name")

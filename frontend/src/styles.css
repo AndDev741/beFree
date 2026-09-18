@@ -128,6 +128,11 @@ td { padding: 9px 0; border-top: 1px solid var(--hair); font-size: 13.5px; verti
 tr:first-child td { border-top: 0; }
 td.r { text-align: right; font-weight: 600; }
 .tag { display: inline-block; padding: 2px 9px; border-radius: 999px; background: var(--surface-3); color: var(--ink-2); font-size: 11.5px; }
+.tag.jar {
+  display: inline-flex; align-items: center; gap: 4px; margin-left: 5px;
+  background: color-mix(in srgb, var(--d3) 14%, var(--surface));
+  color: color-mix(in srgb, var(--d3) 75%, var(--ink));
+}
 .rowbtns { display: flex; gap: 2px; justify-content: flex-end; }
 
 /* forms */

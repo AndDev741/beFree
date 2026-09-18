@@ -105,7 +105,7 @@ export function Dashboard({ month, revision, onOpen }: Props) {
   }
 
   const s = data;
-  const nothing = s.income === 0 && s.spent === 0 && s.reserved === 0;
+  const nothing = s.income === 0 && s.spent === 0 && s.reserved === 0 && s.spentFromGoals === 0;
   const rate = s.income > 0 ? Math.round((s.reserved / s.income) * 100) : null;
 
   if (nothing) {
@@ -211,6 +211,13 @@ export function Dashboard({ month, revision, onOpen }: Props) {
         Ver todos os movimentos de {monthLabel(month)}
         <ArrowUpRight size={15} />
       </button>
+
+      {s.spentFromGoals > 0 && (
+        <div className="note">
+          <PiggyBank size={17} weight="fill" />
+          Mais {eur(s.spentFromGoals)} € saíram de objetivos, pagos pelo que juntaste antes, por isso não contam neste mês.
+        </div>
+      )}
 
       {rate !== null && rate >= 20 && (
         <div className="note">

@@ -31,7 +31,7 @@ class FinanceToolsTest {
     void recordsUnderTheConversationIdentity() {
         context.open(Source.WHATSAPP, "wamid.TOOLS1", "12,50 almoço");
 
-        String out = tools.recordTransaction(new BigDecimal("12.50"), TransactionType.EXPENSE, "almoço", null, "2026-07-03");
+        String out = tools.recordTransaction(new BigDecimal("12.50"), TransactionType.EXPENSE, "almoço", null, "2026-07-03", null);
 
         assertTrue(out.startsWith("Recorded #"), out);
         var stored = Transaction.bySourceRef(Source.WHATSAPP, "wamid.TOOLS1#1").orElseThrow();
@@ -43,8 +43,8 @@ class FinanceToolsTest {
     void secondItemInSameMessageGetsNextSuffix() {
         context.open(Source.WHATSAPP, "wamid.TOOLS2", "50 lidl e 12 gasolina");
 
-        tools.recordTransaction(new BigDecimal("50"), TransactionType.EXPENSE, "lidl", null, "2026-07-04");
-        tools.recordTransaction(new BigDecimal("12"), TransactionType.EXPENSE, "gasolina", null, "2026-07-04");
+        tools.recordTransaction(new BigDecimal("50"), TransactionType.EXPENSE, "lidl", null, "2026-07-04", null);
+        tools.recordTransaction(new BigDecimal("12"), TransactionType.EXPENSE, "gasolina", null, "2026-07-04", null);
 
         assertTrue(Transaction.bySourceRef(Source.WHATSAPP, "wamid.TOOLS2#1").isPresent());
         assertTrue(Transaction.bySourceRef(Source.WHATSAPP, "wamid.TOOLS2#2").isPresent());
@@ -52,7 +52,7 @@ class FinanceToolsTest {
 
     @Test
     void unknownCategoryIsReportedNotInvented() {
-        String out = tools.recordTransaction(new BigDecimal("9"), TransactionType.EXPENSE, "x", "Nope", "2026-07-05");
+        String out = tools.recordTransaction(new BigDecimal("9"), TransactionType.EXPENSE, "x", "Nope", "2026-07-05", null);
         assertTrue(out.startsWith("ERROR"), out);
     }
 
@@ -63,9 +63,9 @@ class FinanceToolsTest {
         assertTrue(tools.listCategories().contains("Food"));
 
         context.open(Source.WHATSAPP, "wamid.TOOLS3", "test");
-        String a = tools.recordTransaction(new BigDecimal("20"), TransactionType.EXPENSE, "lunch", "Food", "2026-06-10");
-        tools.recordTransaction(new BigDecimal("5"), TransactionType.EXPENSE, "bus", null, "2026-06-11");
-        tools.recordTransaction(new BigDecimal("1500"), TransactionType.INCOME, "salary", null, "2026-06-01");
+        String a = tools.recordTransaction(new BigDecimal("20"), TransactionType.EXPENSE, "lunch", "Food", "2026-06-10", null);
+        tools.recordTransaction(new BigDecimal("5"), TransactionType.EXPENSE, "bus", null, "2026-06-11", null);
+        tools.recordTransaction(new BigDecimal("1500"), TransactionType.INCOME, "salary", null, "2026-06-01", null);
 
         String summary = tools.monthlySummary("2026-06");
         assertTrue(summary.contains("Food: 20"), summary);
@@ -85,7 +85,7 @@ class FinanceToolsTest {
         tools.createCategory("Transporte");
         tools.createCategory("Uber");
         context.open(Source.WHATSAPP, "wamid.TOOLS4", "test");
-        String a = tools.recordTransaction(new BigDecimal("9"), TransactionType.EXPENSE, "uber", "Uber", "2026-05-02");
+        String a = tools.recordTransaction(new BigDecimal("9"), TransactionType.EXPENSE, "uber", "Uber", "2026-05-02", null);
         long id = Long.parseLong(a.substring(a.indexOf('#') + 1, a.indexOf(':')));
 
         assertTrue(tools.renameCategory("Uber", "Boleias").startsWith("Renamed"));

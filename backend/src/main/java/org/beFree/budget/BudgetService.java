@@ -95,8 +95,10 @@ public class BudgetService {
         LocalDate from = range.from();
         LocalDate to = range.to();
         List<Object[]> rows = Transaction.getEntityManager().createQuery(
+                        // Paid out of a goal is not spending against a budget: the point of
+                        // saving for something is that it does not eat the month it happens in
                         "select t.category.id, sum(t.amount) from Transaction t "
-                                + "where t.type = :type and t.category is not null "
+                                + "where t.type = :type and t.category is not null and t.goal is null "
                                 + "and t.occurredOn >= :from and t.occurredOn < :to group by t.category.id",
                         Object[].class)
                 .setParameter("type", TransactionType.EXPENSE)

@@ -45,7 +45,7 @@ public class TransactionResource {
         try {
             Transaction t = transactions.record(new NewTransaction(
                     req.amount(), req.type(), req.currency(), req.occurredOn(),
-                    req.description(), req.categoryId(),
+                    req.description(), req.categoryId(), req.goalId(),
                     Source.MANUAL, null, null));
             return RestResponse.status(RestResponse.Status.CREATED, TransactionResponse.from(t));
         } catch (IllegalArgumentException e) {
@@ -75,6 +75,15 @@ public class TransactionResource {
         }
         if (req.occurredOn() != null) {
             t.occurredOn = req.occurredOn();
+        }
+        if (Boolean.TRUE.equals(req.clearGoal())) {
+            t.goal = null;
+        } else if (req.goalId() != null) {
+            try {
+                t.goal = transactions.payingFrom(req.goalId(), t.type, t.amount);
+            } catch (IllegalArgumentException e) {
+                throw new BadRequestException(e.getMessage());
+            }
         }
         if (Boolean.TRUE.equals(req.clearCategory())) {
             t.category = null;

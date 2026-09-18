@@ -1,6 +1,7 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { Check, PencilSimple, Plus, Receipt, Trash, X } from '@phosphor-icons/react';
 import { api, currentMonth, eur, monthLabel, type Transaction, type TransactionType } from './api';
+import { PiggyBank } from '@phosphor-icons/react';
 import { useLoad } from './hooks';
 import { Card, CategoryField, Empty, ErrorBanner, Skeleton } from './ui';
 
@@ -18,6 +19,7 @@ interface Draft {
   description: string;
   occurredOn: string;
   categoryId: number | null;
+  goalId: number | null;
 }
 
 /** Today when you are looking at the month you are living in, else where that month starts. */
@@ -37,12 +39,14 @@ const dayLabel = (iso: string) =>
 export function Transactions({ month, revision, onChanged, startDay }: Props) {
   const list = useLoad(() => api.transactions(month), `tx:${month}:${revision}`);
   const categories = useLoad(() => api.categories(), `cat:${revision}`);
+  const goals = useLoad(() => api.goals(), `goals:${revision}`);
 
   const [type, setType] = useState<TransactionType>('EXPENSE');
   const [amount, setAmount] = useState('');
   const [description, setDescription] = useState('');
   const [occurredOn, setOccurredOn] = useState(() => defaultDate(month, startDay));
   const [categoryId, setCategoryId] = useState<number | null>(null);
+  const [goalId, setGoalId] = useState<number | null>(null);
   const [busy, setBusy] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const [editing, setEditing] = useState<Draft | null>(null);
@@ -66,6 +70,7 @@ export function Transactions({ month, revision, onChanged, startDay }: Props) {
         description: description.trim() || null,
         occurredOn,
         categoryId,
+        goalId: type === 'EXPENSE' ? goalId : null,
       });
       setAmount('');
       setDescription('');
@@ -91,6 +96,7 @@ export function Transactions({ month, revision, onChanged, startDay }: Props) {
       description: draft.description,
       occurredOn: draft.occurredOn,
       ...(draft.categoryId === null ? { clearCategory: true } : { categoryId: draft.categoryId }),
+      ...(draft.goalId === null ? { clearGoal: true } : { goalId: draft.goalId }),
     });
     setEditing(null);
     onChanged();
@@ -98,6 +104,8 @@ export function Transactions({ month, revision, onChanged, startDay }: Props) {
 
   const rows = list.data ?? [];
   const cats = categories.data ?? [];
+  // Only a jar with something in it can pay for anything
+  const jars = (goals.data ?? []).filter((g) => g.saved > 0);
 
   return (
     <>
@@ -126,6 +134,18 @@ export function Transactions({ month, revision, onChanged, startDay }: Props) {
             <CategoryField id="c" categories={cats} value={categoryId}
                            onChange={setCategoryId} onCreated={onChanged} />
           </div>
+          {type === 'EXPENSE' && jars.length > 0 && (
+            <div className="field" style={{ width: 170 }}>
+              <label htmlFor="g">Sai de</label>
+              <select id="g" className="input" value={goalId ?? ''}
+                      onChange={(e) => setGoalId(e.target.value ? Number(e.target.value) : null)}>
+                <option value="">Do dinheiro do mês</option>
+                {jars.map((g) => (
+                  <option key={g.id} value={g.id}>{g.name} ({eur(g.saved)} €)</option>
+                ))}
+              </select>
+            </div>
+          )}
           <div className="field" style={{ width: 150 }}>
             <label htmlFor="o">Data</label>
             <input id="o" className="input" type="date" value={occurredOn}
@@ -181,6 +201,20 @@ export function Transactions({ month, revision, onChanged, startDay }: Props) {
                         onChange={(id) => setEditing({ ...editing, categoryId: id })}
                         onCreated={() => categories.reload()}
                       />
+                      {(jars.length > 0 || editing.goalId !== null) && (
+                        <select
+                          className="input mini"
+                          style={{ marginTop: 4 }}
+                          aria-label="Sai de"
+                          value={editing.goalId ?? ''}
+                          onChange={(e) => setEditing({ ...editing, goalId: e.target.value ? Number(e.target.value) : null })}
+                        >
+                          <option value="">Do mês</option>
+                          {(goals.data ?? []).map((g) => (
+                            <option key={g.id} value={g.id}>{g.name}</option>
+                          ))}
+                        </select>
+                      )}
                     </td>
                     <td>
                       <input className="input mini num" style={{ textAlign: 'right' }} inputMode="decimal"
@@ -205,7 +239,15 @@ export function Transactions({ month, revision, onChanged, startDay }: Props) {
                       {t.description || <span style={{ color: 'var(--ink-3)' }}>sem descrição</span>}
                       {t.source === 'WHATSAPP' && <span className="tag" style={{ marginLeft: 8 }}>whatsapp</span>}
                     </td>
-                    <td>{t.category ? <span className="tag">{t.category}</span> : null}</td>
+                    <td>
+                      {t.category ? <span className="tag">{t.category}</span> : null}
+                      {t.goal && (
+                        <span className="tag jar" title={`Pago com o que juntaste em ${t.goal}`}>
+                          <PiggyBank size={12} weight="fill" />
+                          {t.goal}
+                        </span>
+                      )}
+                    </td>
                     <td className="r num" style={t.type === 'INCOME' ? { color: 'var(--good)' } : undefined}>
                       {t.type === 'INCOME' ? '+' : '−'}{eur(t.amount)} €
                     </td>
@@ -219,6 +261,7 @@ export function Transactions({ month, revision, onChanged, startDay }: Props) {
                             description: t.description ?? '',
                             occurredOn: t.occurredOn,
                             categoryId: cats.find((c) => c.name === t.category)?.id ?? null,
+                            goalId: t.goalId,
                           })}
                           aria-label="Editar"
                         >

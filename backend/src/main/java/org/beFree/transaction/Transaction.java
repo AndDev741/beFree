@@ -1,5 +1,6 @@
 package org.beFree.transaction;
 import org.beFree.category.Category;
+import org.beFree.goal.Goal;
 
 import io.quarkus.hibernate.orm.panache.PanacheEntity;
 import io.quarkus.panache.common.Sort;
@@ -9,6 +10,7 @@ import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
 import jakarta.persistence.FetchType;
 import jakarta.persistence.Index;
+import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
 import jakarta.persistence.UniqueConstraint;
@@ -46,6 +48,15 @@ public class Transaction extends PanacheEntity {
 
     @ManyToOne(fetch = FetchType.LAZY)
     public Category category;
+
+    /**
+     * Set when this expense was paid out of a goal instead of out of the
+     * month. The money was put aside over earlier months, so counting it
+     * against this month's income would charge for it twice.
+     */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "goal_id")
+    public Goal goal;
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 16)

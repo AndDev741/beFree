@@ -12,6 +12,9 @@ public record TransactionResponse(
         LocalDate occurredOn,
         String description,
         String category,
+        /** The goal this came out of, when it was not paid from the month. */
+        String goal,
+        Long goalId,
         Source source,
         Instant createdAt) {
 
@@ -20,6 +23,8 @@ public record TransactionResponse(
         return new TransactionResponse(
                 t.id, t.amount, t.type, t.currency, t.occurredOn, t.description,
                 t.category != null ? t.category.name : null,
+                t.goal != null ? t.goal.name : null,
+                t.goal != null ? t.goal.id : null,
                 t.source, t.createdAt);
     }
 }

@@ -43,8 +43,8 @@ class BudgetAndGoalToolsTest {
         assertTrue(empty.contains("spent 0 of 300.00"), empty);
 
         context.open(Source.WHATSAPP, "wamid.BUD1", "compras");
-        finance.recordTransaction(new BigDecimal("120.50"), TransactionType.EXPENSE, "Lidl", "Mercado", "2026-10-03");
-        finance.recordTransaction(new BigDecimal("60"), TransactionType.EXPENSE, "Pingo Doce", "Mercado", "2026-10-09");
+        finance.recordTransaction(new BigDecimal("120.50"), TransactionType.EXPENSE, "Lidl", "Mercado", "2026-10-03", null);
+        finance.recordTransaction(new BigDecimal("60"), TransactionType.EXPENSE, "Pingo Doce", "Mercado", "2026-10-09", null);
 
         String status = planning.budgetStatus("2026-10");
         assertTrue(status.contains("spent 180.50 of 300.00"), status);
@@ -58,7 +58,7 @@ class BudgetAndGoalToolsTest {
         planning.setBudget("Restaurantes", new BigDecimal("50"), "2026-11");
 
         context.open(Source.WHATSAPP, "wamid.BUD2", "jantar");
-        finance.recordTransaction(new BigDecimal("80"), TransactionType.EXPENSE, "sushi", "Restaurantes", "2026-11-04");
+        finance.recordTransaction(new BigDecimal("80"), TransactionType.EXPENSE, "sushi", "Restaurantes", "2026-11-04", null);
 
         String status = planning.budgetStatus("2026-11");
         assertTrue(status.contains("over by 30.00"), status);
@@ -70,7 +70,9 @@ class BudgetAndGoalToolsTest {
         planning.setBudget("Transporte", new BigDecimal("40"), "2026-12");
         planning.setBudget("Transporte", new BigDecimal("55"), "2026-12");
 
-        assertEquals(1, Budget.count("period", java.time.YearMonth.of(2026, 12).atDay(1)));
+        // Scoped to its own category: a global count is at the mercy of every other test
+        assertEquals(1, Budget.count("period = ?1 and category.name = ?2",
+                java.time.YearMonth.of(2026, 12).atDay(1), "Transporte"));
         assertTrue(planning.budgetStatus("2026-12").contains("of 55.00"));
 
         assertTrue(planning.removeBudget("Transporte", "2026-12").startsWith("Removed"));

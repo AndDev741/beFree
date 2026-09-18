@@ -146,7 +146,12 @@ function GoalCard({ goal, onChanged }: { goal: GoalView; onChanged: () => void }
         <div className="bar">
           <i className="save" style={{ width: `${percent}%` }} />
         </div>
-        {goal.initial > 0 && !goal.reached && (
+        {goal.spent > 0 && (
+          <div className="mfoot">
+            Já gastaste {eur(goal.spent)} € deste objetivo, e sobram {eur(goal.saved)} €
+          </div>
+        )}
+        {goal.initial > 0 && goal.spent === 0 && !goal.reached && (
           <div className="mfoot">
             {eur(goal.initial)} € já tinhas, {eur(goal.saved - goal.initial)} € juntaste desde então
           </div>

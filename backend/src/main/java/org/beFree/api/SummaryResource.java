@@ -53,7 +53,8 @@ public class SummaryResource {
 
         List<Object[]> rows = Transaction.getEntityManager().createQuery(
                         "select c.name, t.type, sum(t.amount) from Transaction t left join t.category c "
-                                + "where t.occurredOn >= :from and t.occurredOn < :to group by c.name, t.type",
+                                + "where t.occurredOn >= :from and t.occurredOn < :to and t.goal is null "
+                                + "group by c.name, t.type",
                         Object[].class)
                 .setParameter("from", from).setParameter("to", to).getResultList();
 
@@ -71,6 +72,13 @@ public class SummaryResource {
         }
         byCategory.sort(Comparator.comparing(Dto.CategorySpend::amount).reversed());
 
+        // Paid out of a jar filled in earlier months, so it is not this month's spending
+        BigDecimal fromGoals = Transaction.getEntityManager().createQuery(
+                        "select coalesce(sum(t.amount), 0) from Transaction t "
+                                + "where t.occurredOn >= :from and t.occurredOn < :to and t.goal is not null",
+                        BigDecimal.class)
+                .setParameter("from", from).setParameter("to", to).getSingleResult();
+
         BigDecimal reserved = GoalContribution.getEntityManager().createQuery(
                         "select coalesce(sum(c.amount), 0) from GoalContribution c "
                                 + "where c.occurredOn >= :from and c.occurredOn < :to", BigDecimal.class)
@@ -78,7 +86,7 @@ public class SummaryResource {
 
         LocalDate today = LocalDate.now(ZoneId.of(zone));
         return new Dto.Summary(
-                ym.toString(), income, spent, reserved,
+                ym.toString(), income, spent, fromGoals, reserved,
                 income.subtract(spent).subtract(reserved),
                 byCategory,
                 budgets.status(ym).stream().map(s -> new Dto.BudgetView(

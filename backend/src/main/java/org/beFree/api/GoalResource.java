@@ -50,8 +50,8 @@ public class GoalResource {
 
     static Dto.GoalView view(GoalService.Progress p, LocalDate today) {
         return new Dto.GoalView(p.goal().id, p.goal().name, p.goal().description, p.goal().target,
-                p.goal().targetDate, p.goal().initialAmount, p.saved(), p.remaining(), p.percent(),
-                p.reached(), p.monthsLeft(today), p.perMonth(today));
+                p.goal().targetDate, p.goal().initialAmount, p.saved(), p.spent(), p.remaining(),
+                p.percent(), p.reached(), p.monthsLeft(today), p.perMonth(today));
     }
 
     /** What was already in the jar. Rejected above the target, which is always a typo. */

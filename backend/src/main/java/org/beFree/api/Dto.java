@@ -43,16 +43,16 @@ public final class Dto {
     }
 
     public record GoalView(Long id, String name, String description, BigDecimal target, LocalDate targetDate,
-                           BigDecimal initial, BigDecimal saved, BigDecimal remaining, Integer percent,
-                           boolean reached, Long monthsLeft, BigDecimal perMonth) {
+                           BigDecimal initial, BigDecimal saved, BigDecimal spent, BigDecimal remaining,
+                           Integer percent, boolean reached, Long monthsLeft, BigDecimal perMonth) {
     }
 
     public record CategorySpend(String category, BigDecimal amount) {
     }
 
     /** One call for the whole dashboard, so the SPA does not fan out on load. */
-    public record Summary(String month, BigDecimal income, BigDecimal spent, BigDecimal reserved,
-                          BigDecimal remaining, List<CategorySpend> byCategory,
+    public record Summary(String month, BigDecimal income, BigDecimal spent, BigDecimal spentFromGoals,
+                          BigDecimal reserved, BigDecimal remaining, List<CategorySpend> byCategory,
                           List<BudgetView> budgets, List<GoalView> goals) {
     }
 

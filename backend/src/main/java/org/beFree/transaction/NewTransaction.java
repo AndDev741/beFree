@@ -14,6 +14,7 @@ public record NewTransaction(
         LocalDate occurredOn,
         String description,
         Long categoryId,
+        Long goalId,
         Source source,
         String externalId,
         String rawInput) {

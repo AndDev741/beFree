@@ -11,6 +11,9 @@ export interface Transaction {
   occurredOn: string;
   description: string | null;
   category: string | null;
+  /** Set when this expense was paid out of a goal instead of out of the month. */
+  goal: string | null;
+  goalId: number | null;
   source: Source;
   createdAt: string;
 }
@@ -38,6 +41,8 @@ export interface GoalView {
   /** What was already put by when the goal was created, outside any month's flow. */
   initial: number;
   saved: number;
+  /** Already paid out of this jar. */
+  spent: number;
   remaining: number;
   percent: number | null;
   reached: boolean;
@@ -49,6 +54,8 @@ export interface Summary {
   month: string;
   income: number;
   spent: number;
+  /** Paid out of goals, which is money earlier months already covered. */
+  spentFromGoals: number;
   reserved: number;
   remaining: number;
   byCategory: { category: string; amount: number }[];
@@ -141,6 +148,7 @@ export const api = {
     description?: string | null;
     occurredOn?: string;
     categoryId?: number | null;
+    goalId?: number | null;
   }) => request<Transaction>('/api/transactions', { method: 'POST', body: JSON.stringify(body) }),
 
   // A field left out keeps its value; clearCategory is how you take one off
@@ -153,6 +161,8 @@ export const api = {
       occurredOn: string;
       categoryId: number;
       clearCategory: boolean;
+      goalId: number;
+      clearGoal: boolean;
     }>,
   ) => request<Transaction>(`/api/transactions/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
 

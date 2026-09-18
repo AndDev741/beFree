@@ -276,6 +276,72 @@ class ApiEndpointsTest {
         }
     }
 
+    /**
+     * The whole point of saving up: when the party finally happens, it is paid
+     * for by the five months that funded it, not by the month it lands in.
+     */
+    @Test
+    void whatYouSavedForPaysForItselfWhenYouSpendIt() {
+        given().contentType(ContentType.JSON).body("{\"name\":\"Festas\"}")
+                .when().post("/api/categories").then().statusCode(201);
+        given().contentType(ContentType.JSON)
+                .body("{\"amount\":800,\"type\":\"INCOME\",\"description\":\"ordenado\",\"occurredOn\":\"2026-12-01\"}")
+                .when().post("/api/transactions").then().statusCode(201);
+        given().contentType(ContentType.JSON).body("{\"category\":\"Festas\",\"limitAmount\":100,\"month\":\"2026-12\"}")
+                .when().put("/api/budgets").then().statusCode(200);
+
+        // 500 put by over earlier months
+        Number goal = given().contentType(ContentType.JSON)
+                .body("{\"name\":\"Festa de anos\",\"target\":500,\"initial\":500}")
+                .when().post("/api/goals").then().statusCode(200)
+                .body("saved", is(500.00f)).body("reached", is(true))
+                .extract().path("id");
+
+        Number party = given().contentType(ContentType.JSON)
+                .body("{\"amount\":320,\"description\":\"festa\",\"occurredOn\":\"2026-12-14\",\"goalId\":%d}"
+                        .formatted(((Number) goal).longValue()))
+                .when().post("/api/transactions").then().statusCode(201)
+                .body("goal", is("Festa de anos"))
+                .extract().path("id");
+
+        // It happened, and it is in the list
+        given().when().get("/api/transactions?month=2026-12").then().body("size()", is(2));
+
+        // But December's own money is untouched, and so is its budget
+        given().when().get("/api/summary?month=2026-12").then().statusCode(200)
+                .body("spent", is(0))
+                .body("spentFromGoals", is(320.00f))
+                .body("remaining", is(800.00f))
+                .body("byCategory", hasSize(0));
+        given().when().get("/api/budgets?month=2026-12")
+                .then().body("find { it.category == 'Festas' }.spent", is(0));
+
+        // The jar paid for it, so the jar is emptier
+        given().when().get("/api/summary?month=2026-12")
+                .then().body("goals.find { it.name == 'Festa de anos' }.saved", is(180.00f))
+                .body("goals.find { it.name == 'Festa de anos' }.spent", is(320.00f))
+                .body("goals.find { it.name == 'Festa de anos' }.reached", is(false));
+
+        // A jar only pays out what it holds
+        given().contentType(ContentType.JSON)
+                .body("{\"amount\":900,\"description\":\"a mais\",\"occurredOn\":\"2026-12-15\",\"goalId\":%d}"
+                        .formatted(((Number) goal).longValue()))
+                .when().post("/api/transactions").then().statusCode(400);
+
+        // Unlinking it puts the money back in the jar and the expense back in the month
+        given().contentType(ContentType.JSON).body("{\"clearGoal\":true}")
+                .when().patch("/api/transactions/%d".formatted(((Number) party).longValue()))
+                .then().statusCode(200).body("goal", nullValue());
+        given().when().get("/api/summary?month=2026-12")
+                .then().body("spent", is(320.00f))
+                .body("spentFromGoals", is(0))
+                .body("remaining", is(480.00f))
+                .body("goals.find { it.name == 'Festa de anos' }.saved", is(500.00f));
+
+        given().when().delete("/api/transactions/%d".formatted(((Number) party).longValue()));
+        given().when().delete("/api/goals/%d".formatted(((Number) goal).longValue()));
+    }
+
     @Test
     void theChatRefusesAFileItCannotRead() {
         // Reaches MediaIngest and comes back with the wording, never touching the model

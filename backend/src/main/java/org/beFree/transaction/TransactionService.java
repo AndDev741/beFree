@@ -5,6 +5,8 @@ import jakarta.inject.Inject;
 import org.beFree.auth.CurrentUser;
 import jakarta.transaction.Transactional;
 import org.beFree.category.Category;
+import org.beFree.goal.Goal;
+import org.beFree.goal.GoalService;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -14,6 +16,9 @@ public class TransactionService {
 
     @Inject
     CurrentUser currentUser;
+
+    @Inject
+    GoalService goals;
 
     @Transactional
     public Transaction record(NewTransaction in) {
@@ -50,8 +55,34 @@ public class TransactionService {
             t.category = category;
         }
 
+        if (in.goalId() != null) {
+            t.goal = payingFrom(in.goalId(), t.type, t.amount);
+        }
+
         // Flush so @CreationTimestamp is populated before callers read it
         t.persistAndFlush();
         return t;
+    }
+
+    /**
+     * A jar can only pay out what it holds. Spending more than is in it is
+     * really two things, part from the jar and part from the month, so say so
+     * rather than quietly letting the goal go negative.
+     */
+    public Goal payingFrom(Long goalId, TransactionType type, BigDecimal amount) {
+        Goal goal = Goal.findById(goalId);
+        if (goal == null) {
+            throw new IllegalArgumentException("unknown goal: " + goalId);
+        }
+        if (type == TransactionType.INCOME) {
+            throw new IllegalArgumentException("income cannot come out of a goal; put it in with a contribution");
+        }
+        BigDecimal available = goals.saved(goal);
+        if (amount.compareTo(available) > 0) {
+            throw new IllegalArgumentException(
+                    "'%s' holds %s EUR, which is less than %s. Record %s from the goal and the rest as a normal expense."
+                            .formatted(goal.name, available, amount, available));
+        }
+        return goal;
     }
 }

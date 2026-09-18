@@ -15,5 +15,7 @@ public record TransactionRequest(
         LocalDate occurredOn,
         String description,
         Long categoryId,
-        Boolean clearCategory) {
+        Boolean clearCategory,
+        Long goalId,
+        Boolean clearGoal) {
 }

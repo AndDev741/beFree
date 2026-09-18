@@ -21,7 +21,13 @@ public class GoalService {
     @Inject
     CurrentUser currentUser;
 
-    public record Progress(Goal goal, BigDecimal saved) {
+    /** `spent` is what has already been paid out of the jar. `saved` is what is left in it. */
+    public record Progress(Goal goal, BigDecimal saved, BigDecimal spent) {
+
+        public Progress(Goal goal, BigDecimal saved) {
+            this(goal, saved, BigDecimal.ZERO);
+        }
+
 
         public BigDecimal remaining() {
             return goal.target.subtract(saved).max(BigDecimal.ZERO);
@@ -72,14 +78,24 @@ public class GoalService {
         return c;
     }
 
-    /** The opening balance plus every contribution since. */
+    /** The opening balance, plus every contribution, minus what has been spent out of it. */
     @Transactional
     public BigDecimal saved(Goal goal) {
         BigDecimal sum = GoalContribution.getEntityManager()
                 .createQuery("select coalesce(sum(c.amount), 0) from GoalContribution c where c.goal = :goal", BigDecimal.class)
                 .setParameter("goal", goal)
                 .getSingleResult();
-        return opening(goal).add(sum == null ? BigDecimal.ZERO : sum);
+        return opening(goal).add(sum == null ? BigDecimal.ZERO : sum).subtract(spent(goal));
+    }
+
+    /** Expenses paid out of this goal. They never touched a month's income. */
+    @Transactional
+    public BigDecimal spent(Goal goal) {
+        BigDecimal sum = GoalContribution.getEntityManager()
+                .createQuery("select coalesce(sum(t.amount), 0) from Transaction t where t.goal = :goal", BigDecimal.class)
+                .setParameter("goal", goal)
+                .getSingleResult();
+        return sum == null ? BigDecimal.ZERO : sum;
     }
 
     private static BigDecimal opening(Goal goal) {
@@ -95,13 +111,23 @@ public class GoalService {
         List<Object[]> rows = GoalContribution.getEntityManager()
                 .createQuery("select c.goal.id, sum(c.amount) from GoalContribution c group by c.goal.id", Object[].class)
                 .getResultList();
-        Map<Long, BigDecimal> savedById = new HashMap<>();
+        Map<Long, BigDecimal> putInById = new HashMap<>();
         for (Object[] row : rows) {
-            savedById.put((Long) row[0], (BigDecimal) row[1]);
+            putInById.put((Long) row[0], (BigDecimal) row[1]);
+        }
+        List<Object[]> paid = GoalContribution.getEntityManager()
+                .createQuery("select t.goal.id, sum(t.amount) from Transaction t where t.goal is not null group by t.goal.id",
+                        Object[].class)
+                .getResultList();
+        Map<Long, BigDecimal> spentById = new HashMap<>();
+        for (Object[] row : paid) {
+            spentById.put((Long) row[0], (BigDecimal) row[1]);
         }
         List<Progress> out = new ArrayList<>(goals.size());
         for (Goal g : goals) {
-            out.add(new Progress(g, opening(g).add(savedById.getOrDefault(g.id, BigDecimal.ZERO))));
+            BigDecimal spent = spentById.getOrDefault(g.id, BigDecimal.ZERO);
+            BigDecimal saved = opening(g).add(putInById.getOrDefault(g.id, BigDecimal.ZERO)).subtract(spent);
+            out.add(new Progress(g, saved, spent));
         }
         return out;
     }
