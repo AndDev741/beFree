@@ -243,6 +243,15 @@ td.r { text-align: right; font-weight: 600; }
 @keyframes pulse { 50% { opacity: .35; } }
 .composer .input { flex: 1; min-width: 0; }
 
+/* the month's arithmetic, written out when something carried over */
+.ledger {
+  display: grid; grid-template-columns: 1fr auto; gap: 6px 16px;
+  font-size: 13px; color: var(--ink-2); margin-bottom: 15px;
+  padding-bottom: 13px; border-bottom: 1px solid var(--hair);
+}
+.ledger b { color: var(--ink); font-weight: 600; }
+.ledger .total { color: var(--ink); font-weight: 600; padding-top: 6px; border-top: 1px solid var(--hair); }
+
 /* mobile */
 .tabbar { display: none; }
 @media (max-width: 860px) {

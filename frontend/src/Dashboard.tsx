@@ -54,7 +54,7 @@ function Allocation({ s }: { s: Summary }) {
     ...top.map((c, i) => ({ label: c.category, amount: c.amount, color: SERIES[i] })),
     ...(others > 0 ? [{ label: 'Outras', amount: others, color: SERIES[5] }] : []),
   ];
-  const base = Math.max(s.income, s.spent + s.reserved, 0.01);
+  const base = Math.max(s.carried + s.income, s.spent + s.reserved, 0.01);
   const free = Math.max(0, base - s.spent - s.reserved);
   const pct = (n: number) => `${(n / base) * 100}%`;
 
@@ -105,7 +105,7 @@ export function Dashboard({ month, revision, onOpen }: Props) {
   }
 
   const s = data;
-  const nothing = s.income === 0 && s.spent === 0 && s.reserved === 0;
+  const nothing = s.income === 0 && s.spent === 0 && s.reserved === 0 && s.carried === 0;
   const rate = s.income > 0 ? Math.round((s.reserved / s.income) * 100) : null;
 
   if (nothing) {
@@ -124,7 +124,11 @@ export function Dashboard({ month, revision, onOpen }: Props) {
     <>
       <div className="figs">
         <Figure lead label="Livre este mês" value={`${eur(s.remaining)} €`}
-                meta={`${eur(s.income)} € entraram, ${eur(s.spent + s.reserved)} € saíram`}
+                meta={
+                  s.carried > 0
+                    ? `${eur(s.carried)} € transitaram, ${eur(s.income)} € entraram, ${eur(s.spent + s.reserved)} € saíram`
+                    : `${eur(s.income)} € entraram, ${eur(s.spent + s.reserved)} € saíram`
+                }
                 positive={s.remaining > 0} />
         <Figure label="Gastos" value={`${eur(s.spent)} €`}
                 meta={s.byCategory.length ? `${s.byCategory.length} categorias` : 'sem categorias'} />
@@ -133,6 +137,15 @@ export function Dashboard({ month, revision, onOpen }: Props) {
       </div>
 
       <Card title="Para onde foi" hint={monthLabel(month)}>
+        {s.carried > 0 && (
+          <div className="ledger">
+            <span>Transitou do mês anterior</span><b className="num">{eur(s.carried)} €</b>
+            <span>Entrou</span><b className="num">{eur(s.income)} €</b>
+            <span>Gastou</span><b className="num">−{eur(s.spent)} €</b>
+            {s.reserved > 0 && <><span>Guardou em objetivos</span><b className="num">−{eur(s.reserved)} €</b></>}
+            <span className="total">Livre</span><b className="num total">{eur(s.remaining)} €</b>
+          </div>
+        )}
         <Allocation s={s} />
       </Card>
 

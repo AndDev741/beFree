@@ -43,6 +43,25 @@ public class SummaryResource {
     @ConfigProperty(name = "befree.zone", defaultValue = "Europe/Lisbon")
     String zone;
 
+    /**
+     * What was left over when this month started: everything that ever came in,
+     * minus everything that went out or was set aside, before day one. Money
+     * does not evaporate at midnight on the 31st, so a month that begins with
+     * something in the pot has to say so.
+     */
+    private BigDecimal carriedInto(LocalDate from) {
+        BigDecimal in = Transaction.getEntityManager().createQuery(
+                        "select coalesce(sum(case when t.type = org.beFree.transaction.TransactionType.INCOME "
+                                + "then t.amount else -t.amount end), 0) from Transaction t where t.occurredOn < :from",
+                        BigDecimal.class)
+                .setParameter("from", from).getSingleResult();
+        BigDecimal setAside = GoalContribution.getEntityManager().createQuery(
+                        "select coalesce(sum(c.amount), 0) from GoalContribution c where c.occurredOn < :from",
+                        BigDecimal.class)
+                .setParameter("from", from).getSingleResult();
+        return in.subtract(setAside);
+    }
+
     @GET
     @Transactional
     public Dto.Summary get(@QueryParam("month") String month) {
@@ -75,10 +94,12 @@ public class SummaryResource {
                                 + "where c.occurredOn >= :from and c.occurredOn < :to", BigDecimal.class)
                 .setParameter("from", from).setParameter("to", to).getSingleResult();
 
+        BigDecimal carried = carriedInto(from);
+
         LocalDate today = LocalDate.now(ZoneId.of(zone));
         return new Dto.Summary(
-                ym.toString(), income, spent, reserved,
-                income.subtract(spent).subtract(reserved),
+                ym.toString(), carried, income, spent, reserved,
+                carried.add(income).subtract(spent).subtract(reserved),
                 byCategory,
                 budgets.status(ym).stream().map(s -> new Dto.BudgetView(
                         s.category(), s.limitAmount(), s.spent(), s.remaining(), s.percentUsed(), s.overspent())).toList(),

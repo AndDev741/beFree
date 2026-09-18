@@ -39,9 +39,13 @@ public final class Dto {
     public record CategorySpend(String category, BigDecimal amount) {
     }
 
-    /** One call for the whole dashboard, so the SPA does not fan out on load. */
-    public record Summary(String month, BigDecimal income, BigDecimal spent, BigDecimal reserved,
-                          BigDecimal remaining, List<CategorySpend> byCategory,
+    /**
+     * One call for the whole dashboard, so the SPA does not fan out on load.
+     * `carried` is what was still in the pot when the month began; `remaining`
+     * already includes it.
+     */
+    public record Summary(String month, BigDecimal carried, BigDecimal income, BigDecimal spent,
+                          BigDecimal reserved, BigDecimal remaining, List<CategorySpend> byCategory,
                           List<BudgetView> budgets, List<GoalView> goals) {
     }
 
