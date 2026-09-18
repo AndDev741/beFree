@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type FormEvent } from 'react';
+import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from 'react';
 import {
   FileArrowUp, FilePdf, Image as ImageIcon, Microphone,
   PaperPlaneRight, Sparkle, Stop, Waveform,
@@ -44,6 +44,7 @@ export function Assistant({ enabled, onChanged }: { enabled: boolean; onChanged:
   const [recording, setRecording] = useState(false);
   const thread = useRef<HTMLDivElement>(null);
   const picker = useRef<HTMLInputElement>(null);
+  const box = useRef<HTMLTextAreaElement>(null);
   const recorder = useRef<MediaRecorder | null>(null);
 
   // getUserMedia only exists on a secure origin, so over plain http on the LAN
@@ -62,6 +63,13 @@ export function Assistant({ enabled, onChanged }: { enabled: boolean; onChanged:
   }, [turns, busy]);
 
   useEffect(() => () => recorder.current?.stream.getTracks().forEach((t) => t.stop()), []);
+
+  useEffect(() => {
+    const el = box.current;
+    if (!el) return;
+    el.style.height = 'auto';
+    el.style.height = `${Math.min(el.scrollHeight, 168)}px`;
+  }, [draft]);
 
   function answered(reply: string) {
     setTurns((t) => [...t, { who: 'it', text: reply }]);
@@ -131,6 +139,15 @@ export function Assistant({ enabled, onChanged }: { enabled: boolean; onChanged:
     e.preventDefault();
     const text = draft.trim();
     if (text && !busy) void send(text);
+  }
+
+  // Enter sends, Shift+Enter breaks the line, like every chat you already use
+  function keyDown(e: KeyboardEvent<HTMLTextAreaElement>) {
+    if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
+      e.preventDefault();
+      const text = draft.trim();
+      if (text && !busy && !recording) void send(text);
+    }
   }
 
   if (!enabled) {
@@ -212,11 +229,14 @@ export function Assistant({ enabled, onChanged }: { enabled: boolean; onChanged:
             {recording ? <Stop size={16} weight="fill" /> : <Microphone size={17} />}
           </button>
         )}
-        <input
-          className="input"
-          placeholder={recording ? 'A gravar…' : 'Escreve aqui…'}
+        <textarea
+          ref={box}
+          className="input composerbox"
+          rows={1}
+          placeholder={recording ? 'A gravar…' : 'Escreve aqui… (Shift+Enter quebra a linha)'}
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
+          onKeyDown={keyDown}
           disabled={busy || recording}
         />
         <button className="btn" type="submit" disabled={busy || recording || !draft.trim()} aria-label="Enviar">
