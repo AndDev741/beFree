@@ -202,6 +202,80 @@ class ApiEndpointsTest {
         given().when().delete("/api/goals/%d".formatted(id.longValue())).then().statusCode(204);
     }
 
+    /**
+     * The cycle has to reach every window at once. A salary counted in one
+     * month by the summary and in another by the movement list would be worse
+     * than no setting at all, so this walks the same rows through all three.
+     */
+    @Test
+    void movingTheStartDayMovesTheWholeMonthWithIt() {
+        Number ciclo = given().contentType(ContentType.JSON).body("{\"name\":\"Ciclo\"}")
+                .when().post("/api/categories").then().statusCode(201).extract().path("id");
+        Number ordenado = given().contentType(ContentType.JSON)
+                .body("{\"amount\":300,\"description\":\"ordenado do dia 25\",\"occurredOn\":\"2026-10-25\",\"type\":\"INCOME\"}")
+                .when().post("/api/transactions").then().statusCode(201).extract().path("id");
+        Number compras = given().contentType(ContentType.JSON)
+                .body("{\"amount\":30,\"description\":\"compras do dia 26\",\"occurredOn\":\"2026-10-26\",\"categoryId\":%d}"
+                        .formatted(ciclo.longValue()))
+                .when().post("/api/transactions").then().statusCode(201).extract().path("id");
+        given().contentType(ContentType.JSON).body("{\"category\":\"Ciclo\",\"limitAmount\":100,\"month\":\"2026-10\"}")
+                .when().put("/api/budgets").then().statusCode(200);
+
+        try {
+            // On the calendar, both land in October
+            given().when().get("/api/summary?month=2026-10").then().body("income", is(300.00f)).body("spent", is(30.00f));
+            given().when().get("/api/transactions?month=2026-10").then().body("size()", is(2));
+            given().when().get("/api/budgets?month=2026-10")
+                    .then().body("find { it.category == 'Ciclo' }.spent", is(30.00f));
+
+            given().contentType(ContentType.JSON).body("{\"monthStartDay\":25}")
+                    .when().put("/api/settings").then().statusCode(200)
+                    .body("defaultStartDay", is(25))
+                    .body("custom", is(false));
+
+            given().when().get("/api/settings?month=2026-10").then().statusCode(200)
+                    .body("startDay", is(25))
+                    .body("from", is("2026-09-25"))
+                    .body("to", is("2026-10-24"));
+
+            // Now both belong to November, and every window agrees
+            given().when().get("/api/summary?month=2026-10").then().body("income", is(0)).body("spent", is(0));
+            given().when().get("/api/summary?month=2026-11").then().body("income", is(300.00f)).body("spent", is(30.00f));
+            given().when().get("/api/transactions?month=2026-10").then().body("size()", is(0));
+            given().when().get("/api/transactions?month=2026-11").then().body("size()", is(2));
+            given().when().get("/api/budgets?month=2026-10")
+                    .then().body("find { it.category == 'Ciclo' }.spent", is(0));
+
+            // November alone starts on the 26th: the salary of the 25th falls back into October
+            given().contentType(ContentType.JSON).body("{\"monthStartDay\":26}")
+                    .when().put("/api/settings?month=2026-11").then().statusCode(200)
+                    .body("startDay", is(26))
+                    .body("custom", is(true))
+                    .body("from", is("2026-10-26"))
+                    .body("to", is("2026-11-24"));
+
+            given().when().get("/api/transactions?month=2026-10").then().body("size()", is(1));
+            given().when().get("/api/transactions?month=2026-11").then().body("size()", is(1));
+            given().when().get("/api/summary?month=2026-10").then().body("income", is(300.00f)).body("spent", is(0));
+            given().when().get("/api/summary?month=2026-11").then().body("income", is(0)).body("spent", is(30.00f));
+
+            // Dropping the exception puts it back
+            given().when().delete("/api/settings/months/2026-11").then().statusCode(200)
+                    .body("custom", is(false))
+                    .body("from", is("2026-10-25"));
+            given().when().get("/api/transactions?month=2026-11").then().body("size()", is(2));
+
+            given().contentType(ContentType.JSON).body("{\"monthStartDay\":29}")
+                    .when().put("/api/settings").then().statusCode(400);
+        } finally {
+            given().contentType(ContentType.JSON).body("{\"monthStartDay\":1}")
+                    .when().put("/api/settings").then().statusCode(200);
+            given().when().delete("/api/settings/months/2026-11");
+            given().when().delete("/api/transactions/%d".formatted(ordenado.longValue()));
+            given().when().delete("/api/transactions/%d".formatted(compras.longValue()));
+        }
+    }
+
     @Test
     void theChatRefusesAFileItCannotRead() {
         // Reaches MediaIngest and comes back with the wording, never touching the model

@@ -10,7 +10,18 @@ public final class Dto {
     private Dto() {
     }
 
-    public record Session(String username, boolean assistantEnabled) {
+    public record Session(String username, boolean assistantEnabled, int monthStartDay) {
+    }
+
+    public record SettingsRequest(Integer monthStartDay) {
+    }
+
+    /**
+     * The cycle as it applies to one month: the day it starts, whether that is
+     * this month's own exception or the default, and the days it covers.
+     */
+    public record Settings(int defaultStartDay, int startDay, boolean custom,
+                           String month, LocalDate from, LocalDate to) {
     }
 
     public record BudgetRequest(String category, BigDecimal limitAmount, String month) {

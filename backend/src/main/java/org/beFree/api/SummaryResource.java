@@ -47,8 +47,9 @@ public class SummaryResource {
     @Transactional
     public Dto.Summary get(@QueryParam("month") String month) {
         YearMonth ym = months.parse(month);
-        LocalDate from = ym.atDay(1);
-        LocalDate to = ym.plusMonths(1).atDay(1);
+        var range = months.range(ym);
+        LocalDate from = range.from();
+        LocalDate to = range.to();
 
         List<Object[]> rows = Transaction.getEntityManager().createQuery(
                         "select c.name, t.type, sum(t.amount) from Transaction t left join t.category c "

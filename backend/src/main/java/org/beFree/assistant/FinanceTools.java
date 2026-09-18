@@ -10,6 +10,7 @@ import jakarta.transaction.Transactional;
 import org.beFree.category.Category;
 import org.beFree.transaction.NewTransaction;
 import org.beFree.transaction.Source;
+import org.beFree.calendar.MonthCycle;
 import org.beFree.transaction.Transaction;
 import org.beFree.transaction.TransactionService;
 import org.beFree.transaction.TransactionType;
@@ -35,6 +36,9 @@ import java.util.Map;
  */
 @ApplicationScoped
 public class FinanceTools {
+
+    @Inject
+    MonthCycle cycle;
 
     private static final Logger LOG = Logger.getLogger(FinanceTools.class);
     /** Sanity ceiling: a personal ledger has no single 1,000,000 EUR line; anything above is a mis-parse. */
@@ -145,7 +149,7 @@ public class FinanceTools {
         LOG.infof("tool monthlySummary(%s)", month);
         YearMonth ym;
         try {
-            ym = (month == null || month.isBlank()) ? YearMonth.now(ZoneId.of(zone)) : YearMonth.parse(month.trim());
+            ym = (month == null || month.isBlank()) ? cycle.current() : YearMonth.parse(month.trim());
         } catch (DateTimeParseException e) {
             return "ERROR: month must be yyyy-MM";
         }
@@ -153,8 +157,8 @@ public class FinanceTools {
                         "select c.name, t.type, sum(t.amount) from Transaction t left join t.category c "
                                 + "where t.occurredOn >= :from and t.occurredOn < :to group by c.name, t.type",
                         Object[].class)
-                .setParameter("from", ym.atDay(1))
-                .setParameter("to", ym.plusMonths(1).atDay(1))
+                .setParameter("from", cycle.range(ym).from())
+                .setParameter("to", cycle.range(ym).to())
                 .getResultList();
         if (rows.isEmpty()) {
             return "No transactions in " + ym + ".";
@@ -191,12 +195,13 @@ public class FinanceTools {
         LOG.infof("tool listTransactions(%s, %s)", month, limit);
         YearMonth ym;
         try {
-            ym = (month == null || month.isBlank()) ? YearMonth.now(ZoneId.of(zone)) : YearMonth.parse(month.trim());
+            ym = (month == null || month.isBlank()) ? cycle.current() : YearMonth.parse(month.trim());
         } catch (DateTimeParseException e) {
             return "ERROR: month must be yyyy-MM";
         }
         int max = (limit == null || limit <= 0) ? 10 : Math.min(limit, 200);
-        List<Transaction> list = Transaction.inMonth(ym);
+        var range = cycle.range(ym);
+        List<Transaction> list = Transaction.between(range.from(), range.to());
         if (list.isEmpty()) {
             return "No transactions in " + ym + ".";
         }

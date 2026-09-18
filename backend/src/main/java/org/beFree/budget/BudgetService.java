@@ -3,6 +3,7 @@ package org.beFree.budget;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import org.beFree.auth.CurrentUser;
+import org.beFree.calendar.MonthCycle;
 import jakarta.transaction.Transactional;
 import org.beFree.category.Category;
 import org.beFree.transaction.Transaction;
@@ -23,6 +24,9 @@ public class BudgetService {
 
     @Inject
     CurrentUser currentUser;
+
+    @Inject
+    MonthCycle cycle;
 
     /**
      * @param spent     expenses recorded in the category that month
@@ -86,9 +90,10 @@ public class BudgetService {
         return out;
     }
 
-    private static Map<Long, BigDecimal> spentByCategory(YearMonth month) {
-        LocalDate from = month.atDay(1);
-        LocalDate to = month.plusMonths(1).atDay(1);
+    private Map<Long, BigDecimal> spentByCategory(YearMonth month) {
+        var range = cycle.range(month);
+        LocalDate from = range.from();
+        LocalDate to = range.to();
         List<Object[]> rows = Transaction.getEntityManager().createQuery(
                         "select t.category.id, sum(t.amount) from Transaction t "
                                 + "where t.type = :type and t.category is not null "

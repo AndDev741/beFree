@@ -8,6 +8,7 @@ import org.beFree.auth.CurrentUser;
 import jakarta.transaction.Transactional;
 import org.beFree.budget.BudgetService;
 import org.beFree.category.Category;
+import org.beFree.calendar.MonthCycle;
 import org.beFree.goal.Goal;
 import org.beFree.goal.GoalService;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
@@ -27,6 +28,9 @@ import java.util.List;
  */
 @ApplicationScoped
 public class PlanningTools {
+
+    @Inject
+    MonthCycle cycle;
 
     private static final Logger LOG = Logger.getLogger(PlanningTools.class);
     private static final BigDecimal MAX_AMOUNT = new BigDecimal("1000000");
@@ -246,7 +250,7 @@ public class PlanningTools {
 
     private YearMonth parseMonth(String month) {
         return (month == null || month.isBlank())
-                ? YearMonth.now(ZoneId.of(zone))
+                ? cycle.current()
                 : YearMonth.parse(month.trim());
     }
 }

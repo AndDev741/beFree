@@ -1,6 +1,6 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { Check, PencilSimple, Plus, Receipt, Trash, X } from '@phosphor-icons/react';
-import { api, eur, monthKey, monthLabel, type Transaction, type TransactionType } from './api';
+import { api, currentMonth, eur, monthLabel, type Transaction, type TransactionType } from './api';
 import { useLoad } from './hooks';
 import { Card, CategoryField, Empty, ErrorBanner, Skeleton } from './ui';
 
@@ -8,6 +8,7 @@ interface Props {
   month: string;
   revision: number;
   onChanged: () => void;
+  startDay: number;
 }
 
 /** A row being edited. Amounts stay strings while typing, so "12," is not NaN. */
@@ -19,30 +20,35 @@ interface Draft {
   categoryId: number | null;
 }
 
-/** First of the viewed month, or today when that month is the one running. */
-function defaultDate(month: string) {
+/** Today when you are looking at the month you are living in, else where that month starts. */
+function defaultDate(month: string, startDay: number) {
   const today = new Date();
-  return month === monthKey(today) ? today.toISOString().slice(0, 10) : `${month}-01`;
+  if (month === currentMonth(startDay, today)) {
+    return today.toISOString().slice(0, 10);
+  }
+  const [y, m] = month.split('-').map(Number);
+  const first = startDay > 1 ? new Date(y, m - 2, startDay) : new Date(y, m - 1, 1);
+  return `${first.getFullYear()}-${String(first.getMonth() + 1).padStart(2, '0')}-${String(first.getDate()).padStart(2, '0')}`;
 }
 
 const dayLabel = (iso: string) =>
   new Date(iso + 'T00:00:00').toLocaleDateString('pt-PT', { day: '2-digit', month: 'short' });
 
-export function Transactions({ month, revision, onChanged }: Props) {
+export function Transactions({ month, revision, onChanged, startDay }: Props) {
   const list = useLoad(() => api.transactions(month), `tx:${month}:${revision}`);
   const categories = useLoad(() => api.categories(), `cat:${revision}`);
 
   const [type, setType] = useState<TransactionType>('EXPENSE');
   const [amount, setAmount] = useState('');
   const [description, setDescription] = useState('');
-  const [occurredOn, setOccurredOn] = useState(defaultDate(month));
+  const [occurredOn, setOccurredOn] = useState(() => defaultDate(month, startDay));
   const [categoryId, setCategoryId] = useState<number | null>(null);
   const [busy, setBusy] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const [editing, setEditing] = useState<Draft | null>(null);
 
   // Changing month up in the header should move the default date with it
-  useEffect(() => setOccurredOn(defaultDate(month)), [month]);
+  useEffect(() => setOccurredOn(defaultDate(month, startDay)), [month, startDay]);
 
   async function add(e: FormEvent) {
     e.preventDefault();

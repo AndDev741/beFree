@@ -59,6 +59,19 @@ export interface Summary {
 export interface Session {
   username: string;
   assistantEnabled: boolean;
+  /** 1 means the calendar month; 25 means a month that runs 25th to 24th. */
+  monthStartDay: number;
+}
+
+export interface Settings {
+  /** Applies to any month without an exception of its own. */
+  defaultStartDay: number;
+  /** The day this month starts on, exception or default. */
+  startDay: number;
+  custom: boolean;
+  month: string;
+  from: string;
+  to: string;
 }
 
 /** Thrown for any non-2xx so callers can branch on 401 without parsing text. */
@@ -193,6 +206,19 @@ export const api = {
 
   deleteGoal: (id: number) => request<void>(`/api/goals/${id}`, { method: 'DELETE' }),
 
+  settings: (month?: string) =>
+    request<Settings>(`/api/settings${month ? `?month=${month}` : ''}`),
+
+  /** Without a month this sets the default; with one it sets that month's exception. */
+  setMonthStartDay: (monthStartDay: number, month?: string) =>
+    request<Settings>(`/api/settings${month ? `?month=${month}` : ''}`, {
+      method: 'PUT',
+      body: JSON.stringify({ monthStartDay }),
+    }),
+
+  clearMonthStartDay: (month: string) =>
+    request<Settings>(`/api/settings/months/${month}`, { method: 'DELETE' }),
+
   chat: (message: string) =>
     request<{ reply: string }>('/api/chat', { method: 'POST', body: JSON.stringify({ message }) }),
 
@@ -220,4 +246,23 @@ export const monthLabel = (key: string) => {
 export const shiftMonth = (key: string, by: number) => {
   const [y, m] = key.split('-').map(Number);
   return monthKey(new Date(y, m - 1 + by, 1));
+};
+
+/**
+ * The month you are living in. With a cycle starting on the 25th, the 26th is
+ * already next month, which is the whole point of the setting.
+ */
+export const currentMonth = (startDay: number, today = new Date()) => {
+  const key = monthKey(today);
+  return startDay > 1 && today.getDate() >= startDay ? shiftMonth(key, 1) : key;
+};
+
+/**
+ * A month runs from its own start to the next month's start, so its span
+ * depends on two days and is computed by the server. This only formats it.
+ */
+export const spanLabel = (from: string, to: string) => {
+  const day = (iso: string) =>
+    new Date(iso + 'T00:00:00').toLocaleDateString('pt-PT', { day: 'numeric', month: 'short' });
+  return `${day(from)} a ${day(to)}`;
 };

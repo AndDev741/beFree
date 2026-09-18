@@ -248,6 +248,16 @@ td.r { text-align: right; font-weight: 600; }
   padding: 8px 11px; line-height: 1.45; font-family: inherit;
 }
 
+/* a panel hung off the button that opens it */
+.pop { position: relative; }
+.popcard {
+  position: absolute; right: 0; top: calc(100% + 8px); z-index: 50; width: 288px;
+  background: var(--surface); border: 1px solid var(--hair); border-radius: var(--r-box);
+  padding: 14px 15px; box-shadow: var(--shadow);
+}
+.mlabel small { display: block; font-size: 10.5px; font-weight: 400; color: var(--ink-3); text-transform: none; margin-top: -2px; }
+.mlabel { line-height: 1.2; }
+
 /* mobile */
 .tabbar { display: none; }
 @media (max-width: 860px) {
@@ -256,6 +266,7 @@ td.r { text-align: right; font-weight: 600; }
 
   .onlymobile { display: grid; }
   .mlabel { min-width: 0; }
+  .popcard { position: fixed; right: 12px; left: 12px; width: auto; top: 64px; }
   .goal { flex-direction: column; align-items: stretch; gap: 12px; }
   .ring { align-self: center; }
 

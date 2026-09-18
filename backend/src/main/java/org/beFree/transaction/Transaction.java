@@ -17,7 +17,6 @@ import org.hibernate.annotations.CreationTimestamp;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
-import java.time.YearMonth;
 import java.util.List;
 import java.util.Optional;
 
@@ -69,10 +68,11 @@ public class Transaction extends PanacheEntity {
     @Column(nullable = false, updatable = false)
     public Instant createdAt;
 
-    public static List<Transaction> inMonth(YearMonth month) {
+    /** Half-open on purpose: the month a date belongs to is not always its calendar month. */
+    public static List<Transaction> between(LocalDate from, LocalDate to) {
         return list("occurredOn >= ?1 and occurredOn < ?2",
-                Sort.descending("occurredOn"),
-                month.atDay(1), month.plusMonths(1).atDay(1));
+                Sort.by("occurredOn").and("id"),
+                from, to);
     }
 
     public static Optional<Transaction> bySourceRef(Source source, String externalId) {

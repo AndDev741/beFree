@@ -1,6 +1,7 @@
 package org.beFree.transaction;
 
 import io.quarkus.panache.common.Sort;
+import org.beFree.api.Months;
 import org.beFree.category.Category;
 import jakarta.inject.Inject;
 import jakarta.transaction.Transactional;
@@ -32,6 +33,9 @@ public class TransactionResource {
 
     @Inject
     TransactionService transactions;
+
+    @Inject
+    Months months;
 
     @POST
     public RestResponse<TransactionResponse> create(TransactionRequest req) {
@@ -98,11 +102,14 @@ public class TransactionResource {
     public List<TransactionResponse> list(@QueryParam("month") String month) {
         List<Transaction> transactions;
         if (month != null) {
+            YearMonth ym;
             try {
-                transactions = Transaction.inMonth(YearMonth.parse(month));
+                ym = YearMonth.parse(month);
             } catch (DateTimeParseException e) {
                 throw new BadRequestException("month must look like 2026-09");
             }
+            var range = months.range(ym);
+            transactions = Transaction.between(range.from(), range.to());
         } else {
             transactions = Transaction.listAll(Sort.descending("occurredOn"));
         }

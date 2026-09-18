@@ -1,9 +1,12 @@
 import { useCallback, useEffect, useState } from 'react';
 import {
-  CaretLeft, CaretRight, ChartDonut, ChatCircleDots, CirclesThreePlus,
-  Minus, Moon, Receipt, SignOut, Sun, Target, Wallet,
+  CaretLeft, CaretRight, ChartDonut, ChatCircleDots, CirclesThreePlus, Gear,
+  Minus, Moon, Receipt, SignOut, Sun, Target, Wallet, X,
 } from '@phosphor-icons/react';
-import { api, monthKey, monthLabel, setUnauthorizedHandler, shiftMonth, type Session } from './api';
+import {
+  api, currentMonth, monthLabel, setUnauthorizedHandler, shiftMonth, spanLabel,
+  type Session, type Settings,
+} from './api';
 import { useTheme } from './hooks';
 import { Login } from './Login';
 import { Dashboard } from './Dashboard';
@@ -13,6 +16,9 @@ import { Goals } from './Goals';
 import { Assistant } from './Assistant';
 
 export type View = 'dash' | 'tx' | 'budgets' | 'goals';
+
+/** Past the 28th a month would skip February, so the choice stops there. */
+const DAYS = Array.from({ length: 28 }, (_, i) => i + 1);
 
 const TABS: { id: View; label: string; icon: typeof ChartDonut }[] = [
   { id: 'dash', label: 'Resumo', icon: ChartDonut },
@@ -40,7 +46,9 @@ export function App() {
   const [session, setSession] = useState<Session | null>(null);
   const [booting, setBooting] = useState(true);
   const [view, setView] = useState<View>('dash');
-  const [month, setMonth] = useState(monthKey());
+  const [month, setMonth] = useState<string | null>(null);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [cycle, setCycle] = useState<Settings | null>(null);
   const [railOpen, setRailOpen] = useState(openByDefault);
   // Bumped whenever anything writes, including the assistant, so every open
   // view refetches. The assistant edits the same ledger the screens draw.
@@ -51,13 +59,26 @@ export function App() {
   const check = useCallback(() => {
     api
       .session()
-      .then(setSession)
+      .then((s) => {
+        setSession(s);
+        // The month you land on depends on the cycle, so it waits for the session
+        setMonth((m) => m ?? currentMonth(s.monthStartDay));
+      })
       .catch(() => setSession(null))
       .finally(() => setBooting(false));
   }, []);
 
   useEffect(check, [check]);
   useEffect(() => setUnauthorizedHandler(() => setSession(null)), []);
+
+  useEffect(() => {
+    if (!session || !month) return;
+    let live = true;
+    api.settings(month).then((s) => live && setCycle(s)).catch(() => undefined);
+    return () => {
+      live = false;
+    };
+  }, [session, month, revision]);
   useEffect(() => {
     try {
       localStorage.setItem('befree-rail', railOpen ? 'open' : 'closed');
@@ -68,9 +89,19 @@ export function App() {
 
   if (booting) return <div className="loginwrap" />;
   if (!session) return <Login onSignedIn={check} />;
+  if (!month) return <div className="loginwrap" />;
 
-  const thisMonth = monthKey();
+  const startDay = cycle?.startDay ?? session.monthStartDay;
+  const thisMonth = currentMonth(session.monthStartDay);
   const props = { month, revision, onChanged: changed };
+  const txProps = { ...props, startDay };
+
+  async function applyCycle(next: Promise<Settings>) {
+    const updated = await next;
+    setCycle(updated);
+    setSession((s) => (s ? { ...s, monthStartDay: updated.defaultStartDay } : s));
+    changed();
+  }
 
   return (
     <div className="app">
@@ -97,6 +128,7 @@ export function App() {
             </button>
             <button className="mlabel" onClick={() => setMonth(thisMonth)} title="Voltar ao mês atual">
               {monthLabel(month)}
+              {cycle && cycle.startDay > 1 && <small>{spanLabel(cycle.from, cycle.to)}</small>}
             </button>
             <button
               className="iconbtn"
@@ -108,6 +140,69 @@ export function App() {
             </button>
           </div>
         )}
+
+        <div className="pop">
+          <button
+            className="iconbtn"
+            onClick={() => setSettingsOpen((o) => !o)}
+            aria-label="Definições"
+            aria-expanded={settingsOpen}
+          >
+            <Gear size={17} />
+          </button>
+          {settingsOpen && (
+            <div className="popcard">
+              <div className="chead" style={{ marginBottom: 12 }}>
+                <span className="ctitle">O meu mês</span>
+                <span className="grow" />
+                <button className="iconbtn" onClick={() => setSettingsOpen(false)} aria-label="Fechar">
+                  <X size={14} />
+                </button>
+              </div>
+
+              <div className="field">
+                <label htmlFor="msd">Começa normalmente no dia</label>
+                <select
+                  id="msd"
+                  className="input"
+                  value={cycle?.defaultStartDay ?? 1}
+                  onChange={(e) => void applyCycle(api.setMonthStartDay(Number(e.target.value)))}
+                >
+                  {DAYS.map((d) => (
+                    <option key={d} value={d}>{d === 1 ? '1 (mês de calendário)' : d}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="field" style={{ marginTop: 12 }}>
+                <label htmlFor="msx">Exceção para {monthLabel(month)}</label>
+                <select
+                  id="msx"
+                  className="input"
+                  value={cycle?.custom ? cycle.startDay : ''}
+                  onChange={(e) =>
+                    void applyCycle(
+                      e.target.value
+                        ? api.setMonthStartDay(Number(e.target.value), month)
+                        : api.clearMonthStartDay(month),
+                    )
+                  }
+                >
+                  <option value="">Sem exceção</option>
+                  {DAYS.map((d) => (
+                    <option key={d} value={d}>dia {d}</option>
+                  ))}
+                </select>
+              </div>
+
+              <p className="help" style={{ marginTop: 10 }}>
+                {cycle && cycle.startDay > 1
+                  ? `${monthLabel(month)} corre de ${spanLabel(cycle.from, cycle.to)}. Um mês acaba onde o seguinte começa, por isso mudar um dia move só essa fronteira.`
+                  : 'Cada mês vai do dia 1 ao último dia.'}
+              </p>
+            </div>
+          )}
+        </div>
 
         <button className="iconbtn" onClick={toggle} aria-label="Alternar tema">
           {isDark ? <Sun size={17} /> : <Moon size={17} />}
@@ -125,7 +220,7 @@ export function App() {
       <div className="main">
         <div className="content">
           {view === 'dash' && <Dashboard {...props} onOpen={setView} />}
-          {view === 'tx' && <Transactions {...props} />}
+          {view === 'tx' && <Transactions {...txProps} />}
           {view === 'budgets' && <Budgets {...props} />}
           {view === 'goals' && <Goals revision={revision} onChanged={changed} />}
         </div>

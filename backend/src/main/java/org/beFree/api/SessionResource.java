@@ -11,6 +11,7 @@ import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.NewCookie;
 import jakarta.ws.rs.core.Response;
 import org.beFree.assistant.AssistantService;
+import org.beFree.calendar.MonthCycle;
 import org.jboss.resteasy.reactive.RestResponse;
 
 /** Lets the SPA ask "am I signed in?" without guessing from a 401 elsewhere. */
@@ -24,6 +25,9 @@ public class SessionResource {
     @Inject
     AssistantService assistant;
 
+    @Inject
+    MonthCycle cycle;
+
     /**
      * Typed on purpose. A bare Response hides the body type, so the native
      * image never registers it for reflection and every call 500s with
@@ -36,7 +40,7 @@ public class SessionResource {
         if (identity == null || identity.isAnonymous()) {
             return RestResponse.status(RestResponse.Status.UNAUTHORIZED);
         }
-        return RestResponse.ok(new Dto.Session(identity.getPrincipal().getName(), assistant.enabled()));
+        return RestResponse.ok(new Dto.Session(identity.getPrincipal().getName(), assistant.enabled(), cycle.defaultStartDay()));
     }
 
     /** Expires the session cookie; the browser then has nothing to send. */
