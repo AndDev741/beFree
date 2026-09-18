@@ -129,8 +129,9 @@ public class PlanningTools {
     public String createGoal(@P("Goal name, e.g. 'Férias'") String name,
                              @P("Target amount in EUR") BigDecimal target,
                              @P("Target date as yyyy-MM-dd, or null") String targetDate,
-                             @P("Short description, or null") String description) {
-        LOG.infof("tool createGoal(%s, %s, %s)", name, target, targetDate);
+                             @P("Short description, or null") String description,
+                             @P("Amount already saved for this before today, or null. Does not count as money set aside this month") BigDecimal alreadySaved) {
+        LOG.infof("tool createGoal(%s, %s, %s, already=%s)", name, target, targetDate, alreadySaved);
         if (name == null || name.isBlank()) {
             return "ERROR: name is required";
         }
@@ -145,6 +146,15 @@ public class PlanningTools {
         goal.name = clean;
         goal.target = target.setScale(2, java.math.RoundingMode.HALF_UP);
         goal.description = description == null || description.isBlank() ? null : description.trim();
+        if (alreadySaved != null) {
+            if (alreadySaved.signum() < 0 || alreadySaved.compareTo(MAX_AMOUNT) > 0) {
+                return "ERROR: the amount already saved must be zero or a plausible positive value";
+            }
+            if (alreadySaved.compareTo(goal.target) > 0) {
+                return "ERROR: already saved is more than the target; raise the target instead";
+            }
+            goal.initialAmount = alreadySaved.setScale(2, java.math.RoundingMode.HALF_UP);
+        }
         if (targetDate != null && !targetDate.isBlank()) {
             try {
                 goal.targetDate = LocalDate.parse(targetDate.trim());
@@ -154,8 +164,10 @@ public class PlanningTools {
         }
         goal.owner = currentUser.name();
         goal.persist();
-        return "Created goal '%s': target %s EUR%s.".formatted(
-                goal.name, goal.target, goal.targetDate == null ? "" : " by " + goal.targetDate);
+        return "Created goal '%s': target %s EUR%s%s.".formatted(
+                goal.name, goal.target,
+                goal.targetDate == null ? "" : " by " + goal.targetDate,
+                goal.initialAmount.signum() > 0 ? ", starting with " + goal.initialAmount + " EUR already saved" : "");
     }
 
     @Tool("Put money into a savings goal, or take it back out with a negative amount")

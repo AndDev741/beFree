@@ -165,6 +165,44 @@ class ApiEndpointsTest {
     }
 
     @Test
+    void moneyAlreadyInTheJarCountsForTheGoalButNotAgainstTheMonth() {
+        given().contentType(ContentType.JSON)
+                .body("{\"amount\":900,\"type\":\"INCOME\",\"description\":\"ordenado\",\"occurredOn\":\"2026-05-01\"}")
+                .when().post("/api/transactions").then().statusCode(201);
+
+        Number id = given().contentType(ContentType.JSON)
+                .body("{\"name\":\"Cofre\",\"target\":1000,\"initial\":400}")
+                .when().post("/api/goals").then().statusCode(200)
+                .body("initial", is(400.00f))
+                .body("saved", is(400.00f))
+                .body("percent", is(40))
+                .extract().path("id");
+
+        // The whole point: 400 that was already there is not 400 set aside in May
+        given().when().get("/api/summary?month=2026-05")
+                .then().statusCode(200)
+                .body("reserved", is(0))
+                .body("remaining", is(900.00f));
+
+        given().contentType(ContentType.JSON).body("{\"amount\":100,\"occurredOn\":\"2026-05-20\"}")
+                .when().post("/api/goals/%d/contributions".formatted(id.longValue()))
+                .then().statusCode(200)
+                .body("saved", is(500.00f));
+
+        // A real contribution still does come out of the month
+        given().when().get("/api/summary?month=2026-05")
+                .then().statusCode(200)
+                .body("reserved", is(100.00f))
+                .body("remaining", is(800.00f));
+
+        given().contentType(ContentType.JSON).body("{\"initial\":5000}")
+                .when().patch("/api/goals/%d".formatted(id.longValue()))
+                .then().statusCode(400);
+
+        given().when().delete("/api/goals/%d".formatted(id.longValue())).then().statusCode(204);
+    }
+
+    @Test
     void theChatRefusesAFileItCannotRead() {
         // Reaches MediaIngest and comes back with the wording, never touching the model
         given().multiPart("file", "notas.txt", "isto não é um recibo".getBytes(), "text/plain")

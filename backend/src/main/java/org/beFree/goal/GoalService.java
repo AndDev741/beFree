@@ -72,13 +72,18 @@ public class GoalService {
         return c;
     }
 
+    /** The opening balance plus every contribution since. */
     @Transactional
     public BigDecimal saved(Goal goal) {
         BigDecimal sum = GoalContribution.getEntityManager()
                 .createQuery("select coalesce(sum(c.amount), 0) from GoalContribution c where c.goal = :goal", BigDecimal.class)
                 .setParameter("goal", goal)
                 .getSingleResult();
-        return sum == null ? BigDecimal.ZERO : sum;
+        return opening(goal).add(sum == null ? BigDecimal.ZERO : sum);
+    }
+
+    private static BigDecimal opening(Goal goal) {
+        return goal.initialAmount == null ? BigDecimal.ZERO : goal.initialAmount;
     }
 
     @Transactional
@@ -96,7 +101,7 @@ public class GoalService {
         }
         List<Progress> out = new ArrayList<>(goals.size());
         for (Goal g : goals) {
-            out.add(new Progress(g, savedById.getOrDefault(g.id, BigDecimal.ZERO)));
+            out.add(new Progress(g, opening(g).add(savedById.getOrDefault(g.id, BigDecimal.ZERO))));
         }
         return out;
     }

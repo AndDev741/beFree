@@ -50,8 +50,22 @@ public class GoalResource {
 
     static Dto.GoalView view(GoalService.Progress p, LocalDate today) {
         return new Dto.GoalView(p.goal().id, p.goal().name, p.goal().description, p.goal().target,
-                p.goal().targetDate, p.saved(), p.remaining(), p.percent(), p.reached(),
-                p.monthsLeft(today), p.perMonth(today));
+                p.goal().targetDate, p.goal().initialAmount, p.saved(), p.remaining(), p.percent(),
+                p.reached(), p.monthsLeft(today), p.perMonth(today));
+    }
+
+    /** What was already in the jar. Rejected above the target, which is always a typo. */
+    private static BigDecimal opening(BigDecimal initial, BigDecimal target) {
+        if (initial == null) {
+            return BigDecimal.ZERO;
+        }
+        if (initial.signum() < 0 || initial.compareTo(MAX_AMOUNT) > 0) {
+            throw new BadRequestException("the amount you already have must be zero or a plausible positive value");
+        }
+        if (initial.compareTo(target) > 0) {
+            throw new BadRequestException("you already have more than the target; raise the target instead");
+        }
+        return initial.setScale(2, RoundingMode.HALF_UP);
     }
 
     @POST
@@ -72,9 +86,10 @@ public class GoalResource {
         goal.target = req.target().setScale(2, RoundingMode.HALF_UP);
         goal.targetDate = req.targetDate();
         goal.description = req.description() == null || req.description().isBlank() ? null : req.description().trim();
+        goal.initialAmount = opening(req.initial(), goal.target);
         goal.owner = currentUser.name();
         goal.persist();
-        return view(new GoalService.Progress(goal, BigDecimal.ZERO), LocalDate.now(ZoneId.of(zone)));
+        return view(new GoalService.Progress(goal, goal.initialAmount), LocalDate.now(ZoneId.of(zone)));
     }
 
     /** Fields left out keep their value; a blank note or date clears it. */
@@ -109,6 +124,9 @@ public class GoalResource {
         }
         if (req.description() != null) {
             goal.description = req.description().isBlank() ? null : req.description().trim();
+        }
+        if (req.initial() != null) {
+            goal.initialAmount = opening(req.initial(), goal.target);
         }
         return view(new GoalService.Progress(goal, goals.saved(goal)), LocalDate.now(ZoneId.of(zone)));
     }

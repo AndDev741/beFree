@@ -3,6 +3,7 @@ package org.beFree.budget;
 import io.quarkus.test.junit.QuarkusTest;
 import jakarta.inject.Inject;
 import org.beFree.assistant.ConversationContext;
+import org.beFree.goal.GoalContribution;
 import org.beFree.assistant.FinanceTools;
 import org.beFree.assistant.PlanningTools;
 import org.beFree.transaction.Source;
@@ -81,8 +82,8 @@ class BudgetAndGoalToolsTest {
 
     @Test
     void goalAccumulatesContributionsAndPacesByDate() {
-        assertTrue(planning.createGoal("Férias", new BigDecimal("1200"), "2027-03-01", "Viagem").startsWith("Created goal"));
-        assertTrue(planning.createGoal("Férias", new BigDecimal("500"), null, null).contains("already exists"));
+        assertTrue(planning.createGoal("Férias", new BigDecimal("1200"), "2027-03-01", "Viagem", null).startsWith("Created goal"));
+        assertTrue(planning.createGoal("Férias", new BigDecimal("500"), null, null, null).contains("already exists"));
 
         assertTrue(planning.contributeToGoal("Férias", new BigDecimal("200"), "2026-09-15", "setembro").contains("Saved 200.00 of 1200.00"));
         assertTrue(planning.contributeToGoal("Férias", new BigDecimal("100"), "2026-10-15", null).contains("Saved 300.00"));
@@ -99,8 +100,21 @@ class BudgetAndGoalToolsTest {
     }
 
     @Test
+    void aGoalCanStartWithMoneyThatIsAlreadyPutBy() {
+        assertTrue(planning.createGoal("Cofrinho", new BigDecimal("800"), null, null, new BigDecimal("300"))
+                .contains("300"));
+        assertTrue(planning.goalProgress().contains("- Cofrinho: 300.00 of 800.00"));
+
+        // Nothing was set aside, so nothing may show up as a contribution
+        assertEquals(0, GoalContribution.count("goal.name", "Cofrinho"));
+
+        assertTrue(planning.createGoal("Impossível", new BigDecimal("100"), null, null, new BigDecimal("500"))
+                .startsWith("ERROR"));
+    }
+
+    @Test
     void reachedGoalStopsAskingForMonthlyContributions() {
-        planning.createGoal("Fundo", new BigDecimal("100"), "2026-12-01", null);
+        planning.createGoal("Fundo", new BigDecimal("100"), "2026-12-01", null, null);
         planning.contributeToGoal("Fundo", new BigDecimal("100"), "2026-09-01", null);
 
         // Scoped to this goal's own line: the listing is global and other tests add goals.
@@ -118,7 +132,7 @@ class BudgetAndGoalToolsTest {
 
     @Test
     void goalContributionsAreNotExpenses() {
-        planning.createGoal("Reserva", new BigDecimal("500"), null, null);
+        planning.createGoal("Reserva", new BigDecimal("500"), null, null, null);
         planning.contributeToGoal("Reserva", new BigDecimal("150"), "2026-08-05", null);
 
         String summary = finance.monthlySummary("2026-08");

@@ -25,15 +25,15 @@ public final class Dto {
      * an absent field and a JSON null look the same once deserialised.
      */
     public record GoalRequest(String name, BigDecimal target, LocalDate targetDate, String description,
-                              Boolean clearTargetDate) {
+                              Boolean clearTargetDate, BigDecimal initial) {
     }
 
     public record ContributionRequest(BigDecimal amount, LocalDate occurredOn, String note) {
     }
 
     public record GoalView(Long id, String name, String description, BigDecimal target, LocalDate targetDate,
-                           BigDecimal saved, BigDecimal remaining, Integer percent, boolean reached,
-                           Long monthsLeft, BigDecimal perMonth) {
+                           BigDecimal initial, BigDecimal saved, BigDecimal remaining, Integer percent,
+                           boolean reached, Long monthsLeft, BigDecimal perMonth) {
     }
 
     public record CategorySpend(String category, BigDecimal amount) {

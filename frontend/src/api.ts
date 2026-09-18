@@ -35,6 +35,8 @@ export interface GoalView {
   description: string | null;
   target: number;
   targetDate: string | null;
+  /** What was already put by when the goal was created, outside any month's flow. */
+  initial: number;
   saved: number;
   remaining: number;
   percent: number | null;
@@ -165,7 +167,13 @@ export const api = {
 
   goals: () => request<GoalView[]>('/api/goals'),
 
-  createGoal: (body: { name: string; target: number; targetDate?: string | null; description?: string | null }) =>
+  createGoal: (body: {
+    name: string;
+    target: number;
+    targetDate?: string | null;
+    description?: string | null;
+    initial?: number;
+  }) =>
     request<GoalView>('/api/goals', { method: 'POST', body: JSON.stringify(body) }),
 
   updateGoal: (
@@ -176,6 +184,7 @@ export const api = {
       targetDate: string;
       description: string;
       clearTargetDate: boolean;
+      initial: number;
     }>,
   ) => request<GoalView>(`/api/goals/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
 

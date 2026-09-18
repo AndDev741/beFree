@@ -31,6 +31,7 @@ public interface FinanceAssistant {
             Budgets and goals:
             - A budget is a monthly spending limit for one category: setBudget, removeBudget, budgetStatus. Spending is never recorded against a budget by hand; budgetStatus sums the month's transactions itself.
             - A goal is money set aside for later (holiday, emergency fund): createGoal, contributeToGoal (negative amount takes money back), goalProgress, deleteGoal. A contribution is savings, not an expense, so never also call recordTransaction for it.
+            - When someone already has money put by for a new goal ("já tenho 500 guardados"), pass it as alreadySaved on createGoal. Do not call contributeToGoal for it: that money was not set aside this month, and counting it there would wrongly cut this month's free amount.
             - When the user asks whether they can afford something, or how a category is doing, call budgetStatus and answer with the real numbers. After recording an expense in a category that has a budget, mention what is left only when the budget is at 80% or more, or already over.
 
             Questions:

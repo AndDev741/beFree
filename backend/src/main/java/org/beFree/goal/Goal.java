@@ -13,7 +13,9 @@ import java.util.Optional;
  * Money set aside for something ahead ("reserve"): a name, a target, and
  * optionally a date to reach it by.
  *
- * The saved amount is the sum of its contributions, never a stored field.
+ * What is saved is the opening balance plus every contribution. The opening
+ * balance is what was already in the jar when the goal was created; it never
+ * appears in a month's flow, because no income went to it that month.
  */
 @Entity
 @Table(name = "goals")
@@ -29,6 +31,10 @@ public class Goal extends PanacheEntity {
 
     @Column(name = "target_date")
     public LocalDate targetDate;
+
+    /** Already in the jar on day one. Counts towards the goal, not towards any month. */
+    @Column(name = "initial_amount", nullable = false, precision = 12, scale = 2)
+    public BigDecimal initialAmount = BigDecimal.ZERO;
 
     @Column(nullable = false, length = 3)
     public String currency = "EUR";
