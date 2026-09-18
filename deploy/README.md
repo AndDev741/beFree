@@ -59,8 +59,8 @@ backend image still runs against a V6 schema; the extra columns sit unused.
 
 ## Notes
 
-- The `befree-frontend` package on GHCR is private on its first push. Make it
-  public, or the node cannot pull it.
+- Both images on GHCR are public, so the node pulls them without a secret.
+  A package that ever turns private needs an imagePullSecret here.
 - The webhook URL does not change. Meta keeps calling
   `https://befree.beyouweb.com/webhooks/whatsapp`; nginx forwards it untouched,
   which matters because the signature covers the raw body.
