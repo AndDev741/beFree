@@ -168,6 +168,7 @@ public class PlanningTools {
         }
         goal.owner = currentUser.name();
         goal.persist();
+        goals.stampIfReached(goal);
         return "Created goal '%s': target %s EUR%s%s.".formatted(
                 goal.name, goal.target,
                 goal.targetDate == null ? "" : " by " + goal.targetDate,
@@ -221,7 +222,10 @@ public class PlanningTools {
                 out.append(" (").append(p.percent()).append("%)");
             }
             if (p.reached()) {
-                out.append(", reached");
+                out.append(p.goal().achievedOn != null ? ", reached on " + p.goal().achievedOn : ", reached");
+                if (p.spent().signum() > 0) {
+                    out.append(", %s already spent from it".formatted(p.spent()));
+                }
             } else if (p.goal().targetDate != null) {
                 out.append(", %s left, %s months to go, put aside %s per month".formatted(
                         p.remaining(), p.monthsLeft(today), p.perMonth(today)));
@@ -233,6 +237,22 @@ public class PlanningTools {
         return out.toString().trim();
     }
 
+    @Tool("Mark a savings goal as reached, or put it back to still saving. A reached goal stops asking for monthly contributions even while it is being spent")
+    @Transactional
+    public String markGoalAchieved(@P("Existing goal name") String goalName,
+                                   @P("true when it is done, false to start saving for it again") Boolean achieved) {
+        LOG.infof("tool markGoalAchieved(%s, %s)", goalName, achieved);
+        var found = Goal.findByName(goalName == null ? "" : goalName.trim());
+        if (found.isEmpty()) {
+            return "ERROR: goal '" + goalName + "' does not exist. Call goalProgress to see the goals.";
+        }
+        Goal goal = found.get();
+        goals.achieved(goal, !Boolean.FALSE.equals(achieved));
+        return goal.achievedOn != null
+                ? "'%s' is marked as reached on %s. It will not ask for monthly contributions any more.".formatted(goal.name, goal.achievedOn)
+                : "'%s' is back to saving.".formatted(goal.name);
+    }
+
     @Tool("Delete a savings goal and its contributions")
     @Transactional
     public String deleteGoal(@P("Existing goal name") String goalName) {
@@ -242,10 +262,14 @@ public class PlanningTools {
             return "ERROR: goal '" + goalName + "' does not exist";
         }
         BigDecimal saved = goals.saved(goal.get());
+        // Expenses paid out of it stay, as ordinary expenses of their months
+        long released = org.beFree.transaction.Transaction.update("goal = null where goal = ?1", goal.get());
         long removed = org.beFree.goal.GoalContribution.delete("goal", goal.get());
         String name = goal.get().name;
         goal.get().delete();
-        return "Deleted goal '%s' and %d contributions (%s EUR were set aside).".formatted(name, removed, saved);
+        return "Deleted goal '%s' and %d contributions (%s EUR were set aside)%s.".formatted(
+                name, removed, saved,
+                released > 0 ? ", and %d expense(s) paid from it went back to their months".formatted(released) : "");
     }
 
     private YearMonth parseMonth(String month) {

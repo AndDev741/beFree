@@ -11,6 +11,7 @@ import java.util.Map;
 import static io.restassured.RestAssured.given;
 import static org.hamcrest.Matchers.is;
 import static org.hamcrest.Matchers.notNullValue;
+import static org.hamcrest.Matchers.nullValue;
 
 /**
  * Black-box run against the packaged app (the native binary under -Dnative).
@@ -56,6 +57,59 @@ class ApiIT {
                 .formParam("j_password", "not-the-password")
                 .when().post("/api/login")
                 .then().statusCode(401);
+    }
+
+    /**
+     * End to end against the packaged binary: save up, reach it, spend it, and
+     * check the goal does not go back to asking for a monthly contribution.
+     */
+    @Test
+    void aGoalYouReachedAndAreSpendingStaysReached() {
+        String cookie = signIn(PASSWORD);
+
+        Number id = given().cookie("befree-session", cookie)
+                .contentType(ContentType.JSON)
+                .body("{\"name\":\"Mota\",\"target\":400,\"targetDate\":\"2027-09-30\"}")
+                .when().post("/api/goals").then().statusCode(200)
+                .body("reached", is(false))
+                .body("perMonth", notNullValue())
+                .extract().path("id");
+
+        given().cookie("befree-session", cookie)
+                .contentType(ContentType.JSON).body("{\"amount\":400,\"occurredOn\":\"2027-02-10\"}")
+                .when().post("/api/goals/%d/contributions".formatted(id.longValue()))
+                .then().statusCode(200)
+                .body("reached", is(true))
+                .body("achievedOn", notNullValue())
+                .body("perMonth", nullValue());
+
+        given().cookie("befree-session", cookie)
+                .contentType(ContentType.JSON)
+                .body("{\"amount\":250,\"description\":\"capacete e seguro\",\"occurredOn\":\"2027-02-20\",\"goalId\":%d}"
+                        .formatted(id.longValue()))
+                .when().post("/api/transactions").then().statusCode(201)
+                .body("goal", is("Mota"));
+
+        given().cookie("befree-session", cookie)
+                .when().get("/api/goals").then().statusCode(200)
+                .body("find { it.name == 'Mota' }.saved", is(150.00f))
+                .body("find { it.name == 'Mota' }.spent", is(250.00f))
+                .body("find { it.name == 'Mota' }.reached", is(true))
+                .body("find { it.name == 'Mota' }.perMonth", nullValue());
+
+        // February's own money never paid for any of it
+        given().cookie("befree-session", cookie)
+                .when().get("/api/summary?month=2027-02").then().statusCode(200)
+                .body("spent", is(0))
+                .body("spentFromGoals", is(250.00f));
+
+        // Deleting the goal releases the expense instead of failing on the key
+        given().cookie("befree-session", cookie)
+                .when().delete("/api/goals/%d".formatted(id.longValue())).then().statusCode(204);
+        given().cookie("befree-session", cookie)
+                .when().get("/api/summary?month=2027-02").then()
+                .body("spent", is(250.00f))
+                .body("spentFromGoals", is(0));
     }
 
     @Test

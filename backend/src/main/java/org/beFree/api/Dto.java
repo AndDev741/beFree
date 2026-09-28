@@ -36,7 +36,7 @@ public final class Dto {
      * an absent field and a JSON null look the same once deserialised.
      */
     public record GoalRequest(String name, BigDecimal target, LocalDate targetDate, String description,
-                              Boolean clearTargetDate, BigDecimal initial) {
+                              Boolean clearTargetDate, BigDecimal initial, Boolean achieved) {
     }
 
     public record ContributionRequest(BigDecimal amount, LocalDate occurredOn, String note) {
@@ -44,7 +44,8 @@ public final class Dto {
 
     public record GoalView(Long id, String name, String description, BigDecimal target, LocalDate targetDate,
                            BigDecimal initial, BigDecimal saved, BigDecimal spent, BigDecimal remaining,
-                           Integer percent, boolean reached, Long monthsLeft, BigDecimal perMonth) {
+                           Integer percent, boolean reached, LocalDate achievedOn,
+                           Long monthsLeft, BigDecimal perMonth) {
     }
 
     public record CategorySpend(String category, BigDecimal amount) {

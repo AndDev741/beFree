@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from 'react';
-import { Confetti, PencilSimple, Plus, Target, Trash } from '@phosphor-icons/react';
+import { ArrowCounterClockwise, CheckCircle, Confetti, PencilSimple, Plus, Target, Trash } from '@phosphor-icons/react';
 import { api, eur, type GoalView } from './api';
 import { useLoad } from './hooks';
 import { Card, Empty, ErrorBanner, Skeleton } from './ui';
@@ -11,6 +11,10 @@ interface Props {
 
 const dateLabel = (iso: string) =>
   new Date(iso + 'T00:00:00').toLocaleDateString('pt-PT', { month: 'long', year: 'numeric' });
+
+/** The day it was reached deserves a day, not just the month. */
+const dayLabel = (iso: string) =>
+  new Date(iso + 'T00:00:00').toLocaleDateString('pt-PT', { day: 'numeric', month: 'short', year: 'numeric' });
 
 interface Edit {
   name: string;
@@ -65,6 +69,16 @@ function GoalCard({ goal, onChanged }: { goal: GoalView; onChanged: () => void }
     }
   }
 
+  async function toggleAchieved() {
+    setBusy(true);
+    try {
+      await api.updateGoal(goal.id, { achieved: !goal.reached });
+      onChanged();
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function remove() {
     if (!confirm(`Apagar o objetivo "${goal.name}" e as suas contribuições?`)) return;
     await api.deleteGoal(goal.id);
@@ -81,11 +95,20 @@ function GoalCard({ goal, onChanged }: { goal: GoalView; onChanged: () => void }
         <div className="chead" style={{ marginBottom: 6 }}>
           <span className="ctitle">{goal.name}</span>
           {goal.reached && (
-            <span className="flag ok" style={{ color: 'var(--d3)' }}>
+            <span className="flag ok" style={{ color: 'var(--d3)' }} title={goal.achievedOn ? `Atingido a ${goal.achievedOn}` : undefined}>
               <Confetti size={14} weight="fill" /> atingido
             </span>
           )}
           <span className="grow" />
+          <button
+            className="iconbtn"
+            onClick={() => void toggleAchieved()}
+            disabled={busy}
+            aria-label={goal.reached ? `Voltar a juntar para ${goal.name}` : `Marcar ${goal.name} como atingido`}
+            title={goal.reached ? 'Voltar a juntar' : 'Já atingi este objetivo'}
+          >
+            {goal.reached ? <ArrowCounterClockwise size={15} /> : <CheckCircle size={15} />}
+          </button>
           <button
             className="iconbtn"
             onClick={() => setEdit({
@@ -158,7 +181,9 @@ function GoalCard({ goal, onChanged }: { goal: GoalView; onChanged: () => void }
         )}
         <div className="mfoot">
           {goal.reached
-            ? 'Objetivo cumprido.'
+            ? goal.spent > 0
+              ? `Cumprido${goal.achievedOn ? ` a ${dayLabel(goal.achievedOn)}` : ''}. Estás a gastar o que juntaste.`
+              : `Objetivo cumprido${goal.achievedOn ? ` a ${dayLabel(goal.achievedOn)}` : ''}.`
             : goal.perMonth && goal.targetDate
               ? `${eur(goal.perMonth)} € por mês até ${dateLabel(goal.targetDate)}`
               : goal.targetDate

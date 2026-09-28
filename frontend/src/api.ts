@@ -46,6 +46,8 @@ export interface GoalView {
   remaining: number;
   percent: number | null;
   reached: boolean;
+  /** The day it was reached. Set once and kept, so spending it does not undo it. */
+  achievedOn: string | null;
   monthsLeft: number | null;
   perMonth: number | null;
 }
@@ -208,6 +210,7 @@ export const api = {
       description: string;
       clearTargetDate: boolean;
       initial: number;
+      achieved: boolean;
     }>,
   ) => request<GoalView>(`/api/goals/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
 

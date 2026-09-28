@@ -320,7 +320,8 @@ class ApiEndpointsTest {
         given().when().get("/api/summary?month=2026-12")
                 .then().body("goals.find { it.name == 'Festa de anos' }.saved", is(180.00f))
                 .body("goals.find { it.name == 'Festa de anos' }.spent", is(320.00f))
-                .body("goals.find { it.name == 'Festa de anos' }.reached", is(false));
+                // Reached when it was filled, and spending it does not undo that
+                .body("goals.find { it.name == 'Festa de anos' }.reached", is(true));
 
         // A jar only pays out what it holds
         given().contentType(ContentType.JSON)
@@ -340,6 +341,67 @@ class ApiEndpointsTest {
 
         given().when().delete("/api/transactions/%d".formatted(((Number) party).longValue()));
         given().when().delete("/api/goals/%d".formatted(((Number) goal).longValue()));
+    }
+
+    /**
+     * The case that prompted this: a goal you met, and are now spending, must
+     * not go back to demanding a contribution every month just because the
+     * balance is falling. Spending it is what you saved it for.
+     */
+    @Test
+    void aReachedGoalStaysReachedWhileYouSpendIt() {
+        Number id = given().contentType(ContentType.JSON)
+                .body("{\"name\":\"Ferias 2027\",\"target\":600,\"targetDate\":\"2027-08-31\"}")
+                .when().post("/api/goals").then().statusCode(200)
+                .body("reached", is(false))
+                .body("achievedOn", nullValue())
+                .body("perMonth", notNullValue())
+                .extract().path("id");
+        String path = "/api/goals/%d".formatted(((Number) id).longValue());
+
+        given().contentType(ContentType.JSON).body("{\"amount\":600,\"occurredOn\":\"2027-01-05\"}")
+                .when().post(path + "/contributions").then().statusCode(200)
+                .body("reached", is(true))
+                .body("achievedOn", notNullValue())
+                .body("perMonth", nullValue());
+
+        // Now spend most of it: the balance falls, the achievement does not
+        given().contentType(ContentType.JSON)
+                .body("{\"amount\":450,\"description\":\"voos\",\"occurredOn\":\"2027-01-20\",\"goalId\":%d}"
+                        .formatted(((Number) id).longValue()))
+                .when().post("/api/transactions").then().statusCode(201);
+
+        given().when().get("/api/goals")
+                .then().statusCode(200)
+                .body("find { it.name == 'Ferias 2027' }.saved", is(150.00f))
+                .body("find { it.name == 'Ferias 2027' }.reached", is(true))
+                .body("find { it.name == 'Ferias 2027' }.perMonth", nullValue());
+
+        // And by hand, both ways
+        given().contentType(ContentType.JSON).body("{\"achieved\":false}")
+                .when().patch(path).then().statusCode(200)
+                .body("reached", is(false))
+                .body("achievedOn", nullValue())
+                .body("perMonth", notNullValue());
+
+        given().contentType(ContentType.JSON).body("{\"achieved\":true}")
+                .when().patch(path).then().statusCode(200)
+                .body("reached", is(true))
+                .body("perMonth", nullValue());
+
+        given().when().delete(path).then().statusCode(204);
+    }
+
+    @Test
+    void anOpeningBalanceThatCoversTheTargetIsAlreadyReached() {
+        Number id = given().contentType(ContentType.JSON)
+                .body("{\"name\":\"Cofre cheio\",\"target\":300,\"initial\":300,\"targetDate\":\"2027-06-30\"}")
+                .when().post("/api/goals").then().statusCode(200)
+                .body("reached", is(true))
+                .body("achievedOn", notNullValue())
+                .body("perMonth", nullValue())
+                .extract().path("id");
+        given().when().delete("/api/goals/%d".formatted(((Number) id).longValue())).then().statusCode(204);
     }
 
     @Test

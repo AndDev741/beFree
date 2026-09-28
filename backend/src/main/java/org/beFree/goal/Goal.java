@@ -36,6 +36,15 @@ public class Goal extends PanacheEntity {
     @Column(name = "initial_amount", nullable = false, precision = 12, scale = 2)
     public BigDecimal initialAmount = BigDecimal.ZERO;
 
+    /**
+     * The day it was reached, stamped the first time the balance covered the
+     * target and never unstamped on its own. Spending what you saved is the
+     * reason you saved it, so a jar draining back below its target is not a
+     * goal you have to start over.
+     */
+    @Column(name = "achieved_on")
+    public LocalDate achievedOn;
+
     @Column(nullable = false, length = 3)
     public String currency = "EUR";
 

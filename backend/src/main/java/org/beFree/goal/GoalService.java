@@ -8,6 +8,7 @@ import jakarta.transaction.Transactional;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDate;
+import java.time.ZoneId;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -21,6 +22,9 @@ public class GoalService {
     @Inject
     CurrentUser currentUser;
 
+    @org.eclipse.microprofile.config.inject.ConfigProperty(name = "befree.zone", defaultValue = "Europe/Lisbon")
+    String zone;
+
     /** `spent` is what has already been paid out of the jar. `saved` is what is left in it. */
     public record Progress(Goal goal, BigDecimal saved, BigDecimal spent) {
 
@@ -33,8 +37,9 @@ public class GoalService {
             return goal.target.subtract(saved).max(BigDecimal.ZERO);
         }
 
+        /** Stamped once and kept, so spending the jar does not un-reach the goal. */
         public boolean reached() {
-            return saved.compareTo(goal.target) >= 0;
+            return goal.achievedOn != null || saved.compareTo(goal.target) >= 0;
         }
 
         public Integer percent() {
@@ -75,7 +80,28 @@ public class GoalService {
         c.note = note;
         c.owner = currentUser.name();
         c.persist();
+        c.flush();
+        stampIfReached(goal);
         return c;
+    }
+
+    /**
+     * Records the moment a goal is met. Called after anything that can cross
+     * the line: a contribution, an opening balance, a lowered target.
+     */
+    @Transactional
+    public boolean stampIfReached(Goal goal) {
+        if (goal.achievedOn != null || saved(goal).compareTo(goal.target) < 0) {
+            return false;
+        }
+        goal.achievedOn = LocalDate.now(ZoneId.of(zone));
+        return true;
+    }
+
+    /** Marking by hand, for a goal you consider done whatever the number says. */
+    @Transactional
+    public void achieved(Goal goal, boolean achieved) {
+        goal.achievedOn = achieved ? (goal.achievedOn == null ? LocalDate.now(ZoneId.of(zone)) : goal.achievedOn) : null;
     }
 
     /** The opening balance, plus every contribution, minus what has been spent out of it. */

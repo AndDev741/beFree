@@ -17,6 +17,8 @@ import org.beFree.auth.CurrentUser;
 import org.beFree.goal.Goal;
 import org.beFree.goal.GoalContribution;
 import org.beFree.goal.GoalService;
+import org.beFree.transaction.Transaction;
+import org.jboss.logging.Logger;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 
 import java.math.BigDecimal;
@@ -29,6 +31,8 @@ import java.util.List;
 @Produces(MediaType.APPLICATION_JSON)
 @Consumes(MediaType.APPLICATION_JSON)
 public class GoalResource {
+
+    private static final Logger LOG = Logger.getLogger(GoalResource.class);
 
     private static final BigDecimal MAX_AMOUNT = new BigDecimal("1000000");
 
@@ -51,7 +55,7 @@ public class GoalResource {
     static Dto.GoalView view(GoalService.Progress p, LocalDate today) {
         return new Dto.GoalView(p.goal().id, p.goal().name, p.goal().description, p.goal().target,
                 p.goal().targetDate, p.goal().initialAmount, p.saved(), p.spent(), p.remaining(),
-                p.percent(), p.reached(), p.monthsLeft(today), p.perMonth(today));
+                p.percent(), p.reached(), p.goal().achievedOn, p.monthsLeft(today), p.perMonth(today));
     }
 
     /** What was already in the jar. Rejected above the target, which is always a typo. */
@@ -89,6 +93,8 @@ public class GoalResource {
         goal.initialAmount = opening(req.initial(), goal.target);
         goal.owner = currentUser.name();
         goal.persist();
+        // An opening balance can already cover the target
+        goals.stampIfReached(goal);
         return view(new GoalService.Progress(goal, goal.initialAmount), LocalDate.now(ZoneId.of(zone)));
     }
 
@@ -128,6 +134,12 @@ public class GoalResource {
         if (req.initial() != null) {
             goal.initialAmount = opening(req.initial(), goal.target);
         }
+        if (req.achieved() != null) {
+            goals.achieved(goal, req.achieved());
+        } else {
+            // A lowered target, or a bigger opening balance, can cross the line
+            goals.stampIfReached(goal);
+        }
         return view(new GoalService.Progress(goal, goals.saved(goal)), LocalDate.now(ZoneId.of(zone)));
     }
 
@@ -157,6 +169,13 @@ public class GoalResource {
         Goal goal = Goal.findById(id);
         if (goal == null) {
             throw new NotFoundException("goal " + id + " not found");
+        }
+        // The expenses paid out of it really happened, so they stay. Without the
+        // jar behind them they become ordinary expenses of the months they fell
+        // in, which is also what stops the foreign key from refusing the delete.
+        long unlinked = Transaction.update("goal = null where goal = ?1", goal);
+        if (unlinked > 0) {
+            LOG.infof("Deleting goal '%s' released %d expense(s) back to their months", goal.name, unlinked);
         }
         GoalContribution.delete("goal", goal);
         goal.delete();
