@@ -3,6 +3,7 @@ package org.beFree.transaction;
 import io.quarkus.panache.common.Sort;
 import org.beFree.api.Months;
 import org.beFree.category.Category;
+import org.beFree.goal.Goal;
 import jakarta.inject.Inject;
 import jakarta.transaction.Transactional;
 import jakarta.ws.rs.BadRequestException;
@@ -61,38 +62,64 @@ public class TransactionResource {
         if (t == null) {
             throw new NotFoundException("transaction " + id + " not found");
         }
+
+        // Work out the whole new state first and check it, then write it.
+        // Checking afterwards does not work: Hibernate flushes the pending
+        // change before running the query, so the jar is asked whether it can
+        // afford an amount it has already been charged.
+        BigDecimal amount = t.amount;
         if (req.amount() != null) {
             if (req.amount().compareTo(BigDecimal.ZERO) <= 0) {
                 throw new BadRequestException("amount must be positive");
             }
-            t.amount = req.amount();
+            amount = req.amount().setScale(2, java.math.RoundingMode.HALF_UP);
         }
-        if (req.type() != null) {
-            t.type = req.type();
+        TransactionType type = req.type() != null ? req.type() : t.type;
+
+        Goal goal = t.goal;
+        if (Boolean.TRUE.equals(req.clearGoal())) {
+            goal = null;
+        } else if (req.goalId() != null) {
+            goal = Goal.findById(req.goalId());
+            if (goal == null) {
+                throw new BadRequestException("unknown goal: " + req.goalId());
+            }
         }
+        // Money coming in never comes out of a jar, so correcting an expense
+        // into income releases it rather than refusing the correction
+        if (type == TransactionType.INCOME) {
+            goal = null;
+        }
+        if (goal != null) {
+            // The jar's balance already has this row subtracted, so what it is
+            // giving back counts towards what it can afford
+            BigDecimal refunded = goal.equals(t.goal) ? t.amount : BigDecimal.ZERO;
+            try {
+                transactions.checkJarCovers(goal, amount, refunded);
+            } catch (IllegalArgumentException e) {
+                throw new BadRequestException(e.getMessage());
+            }
+        }
+
+        Category category = t.category;
+        if (Boolean.TRUE.equals(req.clearCategory())) {
+            category = null;
+        } else if (req.categoryId() != null) {
+            category = Category.findById(req.categoryId());
+            if (category == null) {
+                throw new BadRequestException("unknown category: " + req.categoryId());
+            }
+        }
+
+        t.amount = amount;
+        t.type = type;
+        t.goal = goal;
+        t.category = category;
         if (req.description() != null) {
             t.description = req.description().isBlank() ? null : req.description().trim();
         }
         if (req.occurredOn() != null) {
             t.occurredOn = req.occurredOn();
-        }
-        if (Boolean.TRUE.equals(req.clearGoal())) {
-            t.goal = null;
-        } else if (req.goalId() != null) {
-            try {
-                t.goal = transactions.payingFrom(req.goalId(), t.type, t.amount);
-            } catch (IllegalArgumentException e) {
-                throw new BadRequestException(e.getMessage());
-            }
-        }
-        if (Boolean.TRUE.equals(req.clearCategory())) {
-            t.category = null;
-        } else if (req.categoryId() != null) {
-            Category category = Category.findById(req.categoryId());
-            if (category == null) {
-                throw new BadRequestException("unknown category: " + req.categoryId());
-            }
-            t.category = category;
         }
         return TransactionResponse.from(t);
     }

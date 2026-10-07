@@ -404,6 +404,65 @@ class ApiEndpointsTest {
         given().when().delete("/api/goals/%d".formatted(((Number) id).longValue())).then().statusCode(204);
     }
 
+    /**
+     * Correcting a row you got wrong, which is most of what editing is for.
+     * Flipping the direction has to work, and has to leave the rest coherent.
+     */
+    @Test
+    void aMovementRecordedTheWrongWayRoundCanBeTurnedAround() {
+        Number id = given().contentType(ContentType.JSON)
+                .body("{\"amount\":60,\"type\":\"INCOME\",\"description\":\"enganei-me\",\"occurredOn\":\"2027-04-08\"}")
+                .when().post("/api/transactions").then().statusCode(201)
+                .body("type", is("INCOME")).extract().path("id");
+        String path = "/api/transactions/%d".formatted(((Number) id).longValue());
+
+        given().when().get("/api/summary?month=2027-04")
+                .then().body("income", is(60.00f)).body("spent", is(0));
+
+        given().contentType(ContentType.JSON).body("{\"type\":\"EXPENSE\"}")
+                .when().patch(path).then().statusCode(200).body("type", is("EXPENSE"));
+
+        given().when().get("/api/summary?month=2027-04")
+                .then().body("income", is(0)).body("spent", is(60.00f));
+
+        given().when().delete(path).then().statusCode(204);
+    }
+
+    /** An expense paid from a jar cannot survive being turned into income. */
+    @Test
+    void turningAJarPaidExpenseIntoIncomeReleasesTheJar() {
+        Number goal = given().contentType(ContentType.JSON)
+                .body("{\"name\":\"Cofre edicao\",\"target\":200,\"initial\":200}")
+                .when().post("/api/goals").then().statusCode(200).extract().path("id");
+        long goalId = ((Number) goal).longValue();
+
+        Number id = given().contentType(ContentType.JSON)
+                .body("{\"amount\":80,\"description\":\"saiu do cofre\",\"occurredOn\":\"2027-04-10\",\"goalId\":%d}"
+                        .formatted(goalId))
+                .when().post("/api/transactions").then().statusCode(201)
+                .body("goal", is("Cofre edicao")).extract().path("id");
+        String path = "/api/transactions/%d".formatted(((Number) id).longValue());
+
+        // Raising it beyond what the jar holds is refused, measured against the change
+        given().contentType(ContentType.JSON).body("{\"amount\":500}")
+                .when().patch(path).then().statusCode(400);
+        // But up to the full jar is fine, even though 80 of it is this same row
+        given().contentType(ContentType.JSON).body("{\"amount\":200}")
+                .when().patch(path).then().statusCode(200).body("amount", is(200.00f));
+
+        given().contentType(ContentType.JSON).body("{\"type\":\"INCOME\"}")
+                .when().patch(path).then().statusCode(200)
+                .body("type", is("INCOME"))
+                .body("goal", nullValue());
+
+        given().when().get("/api/goals")
+                .then().body("find { it.name == 'Cofre edicao' }.saved", is(200.00f))
+                .body("find { it.name == 'Cofre edicao' }.spent", is(0));
+
+        given().when().delete(path).then().statusCode(204);
+        given().when().delete("/api/goals/%d".formatted(goalId)).then().statusCode(204);
+    }
+
     @Test
     void theChatRefusesAFileItCannotRead() {
         // Reaches MediaIngest and comes back with the wording, never touching the model

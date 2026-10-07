@@ -37,7 +37,9 @@ public class TransactionService {
         }
 
         Transaction t = new Transaction();
-        t.amount = in.amount();
+        // Cents, always: an amount written as 50 and one written as 50.00 are
+        // the same money and must not come back as different JSON
+        t.amount = in.amount().setScale(2, java.math.RoundingMode.HALF_UP);
         t.type = in.type() != null ? in.type() : TransactionType.EXPENSE;
         t.currency = in.currency() != null ? in.currency() : "EUR";
         t.occurredOn = in.occurredOn() != null ? in.occurredOn() : LocalDate.now();
@@ -77,12 +79,20 @@ public class TransactionService {
         if (type == TransactionType.INCOME) {
             throw new IllegalArgumentException("income cannot come out of a goal; put it in with a contribution");
         }
-        BigDecimal available = goals.saved(goal);
+        checkJarCovers(goal, amount, BigDecimal.ZERO);
+        return goal;
+    }
+
+    /**
+     * @param refunded what this same row is already taking out of the jar and
+     *                 would give back, so an edit is judged on the change
+     */
+    public void checkJarCovers(Goal goal, BigDecimal amount, BigDecimal refunded) {
+        BigDecimal available = goals.saved(goal).add(refunded);
         if (amount.compareTo(available) > 0) {
             throw new IllegalArgumentException(
                     "'%s' holds %s EUR, which is less than %s. Record %s from the goal and the rest as a normal expense."
                             .formatted(goal.name, available, amount, available));
         }
-        return goal;
     }
 }

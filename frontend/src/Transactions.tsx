@@ -15,6 +15,7 @@ interface Props {
 /** A row being edited. Amounts stay strings while typing, so "12," is not NaN. */
 interface Draft {
   id: number;
+  type: TransactionType;
   amount: string;
   description: string;
   occurredOn: string;
@@ -93,10 +94,11 @@ export function Transactions({ month, revision, onChanged, startDay }: Props) {
     if (!Number.isFinite(value) || value <= 0) return;
     await api.updateTransaction(draft.id, {
       amount: value,
+      type: draft.type,
       description: draft.description,
       occurredOn: draft.occurredOn,
       ...(draft.categoryId === null ? { clearCategory: true } : { categoryId: draft.categoryId }),
-      ...(draft.goalId === null ? { clearGoal: true } : { goalId: draft.goalId }),
+      ...(draft.goalId === null || draft.type === 'INCOME' ? { clearGoal: true } : { goalId: draft.goalId }),
     });
     setEditing(null);
     onChanged();
@@ -188,6 +190,18 @@ export function Transactions({ month, revision, onChanged, startDay }: Props) {
                     <td>
                       <input className="input mini" type="date" value={editing.occurredOn}
                              onChange={(e) => setEditing({ ...editing, occurredOn: e.target.value })} />
+                      <button
+                        type="button"
+                        className="dirbtn"
+                        onClick={() => setEditing({
+                          ...editing,
+                          type: editing.type === 'EXPENSE' ? 'INCOME' : 'EXPENSE',
+                          goalId: editing.type === 'EXPENSE' ? null : editing.goalId,
+                        })}
+                        title="Trocar entre gasto e entrada"
+                      >
+                        {editing.type === 'INCOME' ? '＋ entrada' : '− gasto'}
+                      </button>
                     </td>
                     <td>
                       <input className="input mini" value={editing.description}
@@ -201,7 +215,7 @@ export function Transactions({ month, revision, onChanged, startDay }: Props) {
                         onChange={(id) => setEditing({ ...editing, categoryId: id })}
                         onCreated={() => categories.reload()}
                       />
-                      {(jars.length > 0 || editing.goalId !== null) && (
+                      {editing.type === 'EXPENSE' && (jars.length > 0 || editing.goalId !== null) && (
                         <select
                           className="input mini"
                           style={{ marginTop: 4 }}
@@ -217,9 +231,13 @@ export function Transactions({ month, revision, onChanged, startDay }: Props) {
                       )}
                     </td>
                     <td>
-                      <input className="input mini num" style={{ textAlign: 'right' }} inputMode="decimal"
-                             value={editing.amount}
-                             onChange={(e) => setEditing({ ...editing, amount: e.target.value })} />
+                      <input
+                        className="input mini num"
+                        style={{ textAlign: 'right', color: editing.type === 'INCOME' ? 'var(--good)' : undefined }}
+                        inputMode="decimal"
+                        value={editing.amount}
+                        onChange={(e) => setEditing({ ...editing, amount: e.target.value })}
+                      />
                     </td>
                     <td>
                       <div className="rowbtns">
@@ -257,6 +275,7 @@ export function Transactions({ month, revision, onChanged, startDay }: Props) {
                           className="iconbtn"
                           onClick={() => setEditing({
                             id: t.id,
+                            type: t.type,
                             amount: String(t.amount),
                             description: t.description ?? '',
                             occurredOn: t.occurredOn,
