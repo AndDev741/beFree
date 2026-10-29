@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import {
-  CaretLeft, CaretRight, ChartDonut, ChatCircleDots, CirclesThreePlus, Gear,
+  CaretLeft, CaretRight, ChartDonut, ChatCircleDots, Gear,
   Minus, Moon, Receipt, SignOut, Sun, Target, Wallet, X,
 } from '@phosphor-icons/react';
 import {
@@ -107,7 +107,7 @@ export function App() {
     <div className="app">
       <header className="appbar">
         <span className="logo">
-          <CirclesThreePlus size={20} weight="fill" />
+          <img src="/logo.svg" alt="" width={22} height={22} />
           beFree
         </span>
 

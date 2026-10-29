@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="beFree">
+  <title>beFree</title>
+  <!-- A b whose bowl is left open, with a coin slipping out of the gap. -->
+  <rect x=".5" y=".5" width="63" height="63" rx="15" fill="#18181b" stroke="#fff" stroke-opacity=".14"/>
+  <g fill="none" stroke="#fafafa" stroke-width="7" stroke-linecap="round">
+    <path d="M18 13V50"/>
+    <path d="M41.59 34.89A12 12 0 1 1 33.11 26.41"/>
+  </g>
+  <circle cx="47" cy="21" r="5" fill="#1baf7a"/>
+</svg>

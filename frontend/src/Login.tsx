@@ -1,5 +1,4 @@
 import { useState, type FormEvent } from 'react';
-import { CirclesThreePlus } from '@phosphor-icons/react';
 import { api } from './api';
 
 export function Login({ onSignedIn }: { onSignedIn: () => void }) {
@@ -25,7 +24,7 @@ export function Login({ onSignedIn }: { onSignedIn: () => void }) {
     <div className="loginwrap">
       <form className="loginbox" onSubmit={submit}>
         <div className="logo" style={{ fontSize: 22, marginBottom: 4 }}>
-          <CirclesThreePlus size={24} weight="fill" />
+          <img src="/logo.svg" alt="" width={28} height={28} />
           beFree
         </div>
         <div className="field">
