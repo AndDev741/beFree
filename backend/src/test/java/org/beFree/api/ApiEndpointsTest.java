@@ -463,6 +463,138 @@ class ApiEndpointsTest {
         given().when().delete("/api/goals/%d".formatted(goalId)).then().statusCode(204);
     }
 
+    /**
+     * The case that prompted archiving: saved for the party, spent the jar on
+     * it, and now the goal is done. It has to leave the active goals without
+     * taking its history with it, the way a delete would.
+     */
+    @Test
+    void aFinishedGoalIsArchivedWithItsHistory() {
+        Number goal = given().contentType(ContentType.JSON)
+                .body("{\"name\":\"Festa da Ines\",\"target\":300,\"targetDate\":\"2027-05-31\"}")
+                .when().post("/api/goals").then().statusCode(200)
+                .body("archivedOn", nullValue())
+                .extract().path("id");
+        long goalId = goal.longValue();
+        String path = "/api/goals/%d".formatted(goalId);
+
+        given().contentType(ContentType.JSON).body("{\"amount\":300,\"occurredOn\":\"2027-05-02\"}")
+                .when().post(path + "/contributions").then().statusCode(200)
+                .body("reached", is(true));
+        Number party = given().contentType(ContentType.JSON)
+                .body("{\"amount\":280,\"description\":\"festa\",\"occurredOn\":\"2027-05-20\",\"goalId\":%d}"
+                        .formatted(goalId))
+                .when().post("/api/transactions").then().statusCode(201)
+                .extract().path("id");
+        String partyPath = "/api/transactions/%d".formatted(party.longValue());
+
+        String archivedOn = given().when().put(path + "/archive").then().statusCode(200)
+                .body("archivedOn", notNullValue())
+                .body("reached", is(true))
+                .body("achievedOn", notNullValue())
+                .body("saved", is(20.00f))
+                .body("spent", is(280.00f))
+                .body("perMonth", nullValue())
+                .extract().path("archivedOn");
+
+        // Out of the active goals and the dashboard, into the archive
+        given().when().get("/api/goals").then().statusCode(200)
+                .body("findAll { it.name == 'Festa da Ines' }", hasSize(0));
+        given().when().get("/api/goals?archived=true").then().statusCode(200)
+                .body("find { it.name == 'Festa da Ines' }.archivedOn", is(archivedOn))
+                .body("find { it.name == 'Festa da Ines' }.achievedOn", notNullValue())
+                .body("find { it.name == 'Festa da Ines' }.target", is(300.00f))
+                .body("find { it.name == 'Festa da Ines' }.spent", is(280.00f))
+                .body("findAll { it.archivedOn == null }", hasSize(0));
+        // May's own figures stay put. The 300 left that month's money and the
+        // party came out of the jar
+        given().when().get("/api/summary?month=2027-05").then().statusCode(200)
+                .body("goals.findAll { it.name == 'Festa da Ines' }", hasSize(0))
+                .body("reserved", is(300.00f))
+                .body("spent", is(0))
+                .body("spentFromGoals", is(280.00f));
+
+        // Archiving twice keeps the first day
+        given().when().put(path + "/archive").then().statusCode(200).body("archivedOn", is(archivedOn));
+
+        // It takes no more money, either way round
+        given().contentType(ContentType.JSON).body("{\"amount\":10,\"occurredOn\":\"2027-05-25\"}")
+                .when().post(path + "/contributions").then().statusCode(400);
+        given().contentType(ContentType.JSON).body("{\"amount\":-10,\"occurredOn\":\"2027-05-25\"}")
+                .when().post(path + "/contributions").then().statusCode(400);
+
+        // And pays for nothing new
+        given().contentType(ContentType.JSON)
+                .body("{\"amount\":5,\"description\":\"velas\",\"occurredOn\":\"2027-05-21\",\"goalId\":%d}"
+                        .formatted(goalId))
+                .when().post("/api/transactions").then().statusCode(400);
+        Number cake = given().contentType(ContentType.JSON)
+                .body("{\"amount\":15,\"description\":\"bolo\",\"occurredOn\":\"2027-05-21\"}")
+                .when().post("/api/transactions").then().statusCode(201)
+                .extract().path("id");
+        String cakePath = "/api/transactions/%d".formatted(cake.longValue());
+        given().contentType(ContentType.JSON).body("{\"goalId\":%d}".formatted(goalId))
+                .when().patch(cakePath).then().statusCode(400);
+
+        // What it already paid for still shows, and still edits, without losing the jar
+        given().when().get("/api/transactions?month=2027-05").then()
+                .body("find { it.description == 'festa' }.goal", is("Festa da Ines"));
+        given().contentType(ContentType.JSON).body("{\"amount\":270,\"description\":\"festa e bolo\"}")
+                .when().patch(partyPath).then().statusCode(200)
+                .body("amount", is(270.00f))
+                .body("goal", is("Festa da Ines"));
+        given().contentType(ContentType.JSON).body("{\"goalId\":%d,\"amount\":280}".formatted(goalId))
+                .when().patch(partyPath).then().statusCode(200)
+                .body("goalId", is(goal.intValue()));
+
+        // A name in the archive is still taken
+        given().contentType(ContentType.JSON).body("{\"name\":\"Festa da Ines\",\"target\":100}")
+                .when().post("/api/goals").then().statusCode(400);
+
+        // A mistaken archive is undone, and the goal takes money again
+        given().when().delete(path + "/archive").then().statusCode(200)
+                .body("archivedOn", nullValue())
+                .body("reached", is(true));
+        given().when().get("/api/goals").then()
+                .body("find { it.name == 'Festa da Ines' }.saved", is(20.00f));
+        given().contentType(ContentType.JSON).body("{\"amount\":10,\"occurredOn\":\"2027-05-25\"}")
+                .when().post(path + "/contributions").then().statusCode(200)
+                .body("saved", is(30.00f));
+
+        given().when().delete(cakePath).then().statusCode(204);
+        given().when().delete(partyPath).then().statusCode(204);
+        given().when().delete(path).then().statusCode(204);
+    }
+
+    /** Giving up on a goal is a way of being done with it too, and it stops asking for money. */
+    @Test
+    void aGoalYouGaveUpOnCanBeArchivedAndStillDeleted() {
+        Number goal = given().contentType(ContentType.JSON)
+                .body("{\"name\":\"Mota nova\",\"target\":3000,\"targetDate\":\"2028-06-30\"}")
+                .when().post("/api/goals").then().statusCode(200)
+                .extract().path("id");
+        String path = "/api/goals/%d".formatted(goal.longValue());
+        given().contentType(ContentType.JSON).body("{\"amount\":120,\"occurredOn\":\"2027-07-04\"}")
+                .when().post(path + "/contributions").then().statusCode(200)
+                .body("perMonth", notNullValue());
+
+        given().when().put(path + "/archive").then().statusCode(200)
+                .body("reached", is(false))
+                .body("achievedOn", nullValue())
+                .body("perMonth", nullValue());
+        given().when().get("/api/goals?archived=true").then()
+                .body("find { it.name == 'Mota nova' }.reached", is(false))
+                .body("find { it.name == 'Mota nova' }.saved", is(120.00f));
+
+        given().when().put("/api/goals/987654321/archive").then().statusCode(404);
+        given().when().delete("/api/goals/987654321/archive").then().statusCode(404);
+
+        // Deleting works from the archive exactly as before
+        given().when().delete(path).then().statusCode(204);
+        given().when().get("/api/goals?archived=true").then()
+                .body("findAll { it.name == 'Mota nova' }", hasSize(0));
+    }
+
     @Test
     void theChatRefusesAFileItCannotRead() {
         // Reaches MediaIngest and comes back with the wording, never touching the model

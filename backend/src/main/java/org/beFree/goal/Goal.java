@@ -45,6 +45,14 @@ public class Goal extends PanacheEntity {
     @Column(name = "achieved_on")
     public LocalDate achievedOn;
 
+    /**
+     * The day it was put away. An archived goal keeps its contributions and
+     * the expenses it paid for, and is closed to anything new until it is
+     * unarchived.
+     */
+    @Column(name = "archived_on")
+    public LocalDate archivedOn;
+
     @Column(nullable = false, length = 3)
     public String currency = "EUR";
 

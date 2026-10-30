@@ -1,6 +1,8 @@
 import { useState, type FormEvent } from 'react';
-import { ArrowCounterClockwise, CheckCircle, Confetti, PencilSimple, Plus, Target, Trash } from '@phosphor-icons/react';
-import { api, eur, type GoalView } from './api';
+import {
+  Archive, ArrowCounterClockwise, ArrowUUpLeft, CaretDown, CaretRight, CheckCircle, Confetti, PencilSimple, Plus, Target, Trash,
+} from '@phosphor-icons/react';
+import { api, ApiError, eur, type GoalView } from './api';
 import { useLoad } from './hooks';
 import { Card, Empty, ErrorBanner, Skeleton } from './ui';
 
@@ -79,6 +81,18 @@ function GoalCard({ goal, onChanged }: { goal: GoalView; onChanged: () => void }
     }
   }
 
+  async function archive() {
+    // Whatever is left in the jar goes out of sight with it
+    if (goal.saved > 0 && !confirm(`Ainda há ${eur(goal.saved)} € em "${goal.name}". Arquivar na mesma?`)) return;
+    setBusy(true);
+    try {
+      await api.archiveGoal(goal.id);
+      onChanged();
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function remove() {
     if (!confirm(`Apagar o objetivo "${goal.name}" e as suas contribuições?`)) return;
     await api.deleteGoal(goal.id);
@@ -121,6 +135,15 @@ function GoalCard({ goal, onChanged }: { goal: GoalView; onChanged: () => void }
             aria-label={`Editar ${goal.name}`}
           >
             <PencilSimple size={15} />
+          </button>
+          <button
+            className="iconbtn"
+            onClick={() => void archive()}
+            disabled={busy}
+            aria-label={`Arquivar ${goal.name}`}
+            title="Arquivar: sai dos objetivos e fica no histórico"
+          >
+            <Archive size={15} />
           </button>
           <button className="iconbtn" onClick={remove} aria-label={`Apagar ${goal.name}`}>
             <Trash size={15} />
@@ -204,6 +227,91 @@ function GoalCard({ goal, onChanged }: { goal: GoalView; onChanged: () => void }
   );
 }
 
+/** One archived goal with its money and its dates. */
+function ArchivedRow({ goal, onChanged }: { goal: GoalView; onChanged: () => void }) {
+  const [busy, setBusy] = useState(false);
+
+  async function unarchive() {
+    setBusy(true);
+    try {
+      await api.unarchiveGoal(goal.id);
+      onChanged();
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function remove() {
+    if (!confirm(`Apagar o objetivo "${goal.name}" e as suas contribuições?`)) return;
+    await api.deleteGoal(goal.id);
+    onChanged();
+  }
+
+  return (
+    <div className="arow">
+      <div className="mrow" style={{ marginBottom: 2 }}>
+        <span className="mname">{goal.name}</span>
+        <span className="grow" />
+        <button
+          className="iconbtn"
+          onClick={() => void unarchive()}
+          disabled={busy}
+          aria-label={`Desarquivar ${goal.name}`}
+          title="Desarquivar: volta aos objetivos"
+        >
+          <ArrowUUpLeft size={15} />
+        </button>
+        <button className="iconbtn" onClick={remove} aria-label={`Apagar ${goal.name}`}>
+          <Trash size={15} />
+        </button>
+      </div>
+      <div className="afig num">
+        Alvo {eur(goal.target)} € · juntaste <b>{eur(goal.saved + goal.spent)} €</b>
+        {goal.spent > 0 && <> · gastaste <b>{eur(goal.spent)} €</b></>}
+        {goal.saved !== 0 && <> · sobram {eur(goal.saved)} €</>}
+      </div>
+      <div className="mfoot">
+        {goal.reached ? (
+          <span className="flag ok" style={{ color: 'var(--d3)' }}>
+            <Confetti size={14} weight="fill" />
+            {goal.achievedOn ? `atingido a ${dayLabel(goal.achievedOn)}` : 'atingido'}
+          </span>
+        ) : (
+          'não chegou ao alvo'
+        )}
+        {goal.archivedOn && ` · arquivado a ${dayLabel(goal.archivedOn)}`}
+      </div>
+    </div>
+  );
+}
+
+/** Goals you are done with, folded away by default because they are a record to look back on. */
+function Archived({ revision, onChanged }: Props) {
+  const list = useLoad(() => api.archivedGoals(), `archived:${revision}`);
+  const [open, setOpen] = useState(false);
+  const rows = list.data ?? [];
+
+  if (list.error) return <ErrorBanner message={list.error} onRetry={list.reload} />;
+  if (rows.length === 0) return null;
+
+  return (
+    <section className="card">
+      <button
+        type="button"
+        className="chead fold"
+        style={open ? undefined : { marginBottom: 0 }}
+        onClick={() => setOpen(!open)}
+        aria-expanded={open}
+      >
+        {open ? <CaretDown size={14} /> : <CaretRight size={14} />}
+        <span className="ctitle">Arquivados</span>
+        <span className="chint">{rows.length === 1 ? '1 objetivo' : `${rows.length} objetivos`}</span>
+      </button>
+      {open && rows.map((g) => <ArchivedRow key={g.id} goal={g} onChanged={onChanged} />)}
+    </section>
+  );
+}
+
 export function Goals({ revision, onChanged }: Props) {
   const list = useLoad(() => api.goals(), `goals:${revision}`);
 
@@ -250,7 +358,14 @@ export function Goals({ revision, onChanged }: Props) {
       setOpen(false);
       onChanged();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Não consegui criar.');
+      // A taken name comes back as a bare 400, and an archived goal is out of sight
+      const archived = err instanceof ApiError && err.status === 400
+        ? await api.archivedGoals().catch(() => [])
+        : [];
+      const hidden = archived.some((g) => g.name.toLowerCase() === name.trim().toLowerCase());
+      setError(hidden
+        ? 'Já tens um objetivo arquivado com este nome. Desarquiva-o, ou escolhe outro nome.'
+        : err instanceof Error ? err.message : 'Não consegui criar.');
     } finally {
       setBusy(false);
     }
@@ -321,6 +436,8 @@ export function Goals({ revision, onChanged }: Props) {
       ) : (
         rows.map((g) => <GoalCard key={g.id} goal={g} onChanged={onChanged} />)
       )}
+
+      <Archived revision={revision} onChanged={onChanged} />
     </>
   );
 }

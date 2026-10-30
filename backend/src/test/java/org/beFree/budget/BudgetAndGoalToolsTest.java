@@ -7,6 +7,7 @@ import org.beFree.goal.GoalContribution;
 import org.beFree.assistant.FinanceTools;
 import org.beFree.assistant.PlanningTools;
 import org.beFree.transaction.Source;
+import org.beFree.transaction.Transaction;
 import org.beFree.transaction.TransactionType;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
@@ -91,7 +92,7 @@ class BudgetAndGoalToolsTest {
         assertTrue(planning.contributeToGoal("Férias", new BigDecimal("100"), "2026-10-15", null).contains("Saved 300.00"));
         assertTrue(planning.contributeToGoal("Férias", new BigDecimal("-50"), "2026-10-20", "imprevisto").contains("Saved 250.00"));
 
-        String progress = planning.goalProgress();
+        String progress = planning.goalProgress(null);
         assertTrue(progress.contains("Férias: 250.00 of 1200.00"), progress);
         assertTrue(progress.contains("(21%)"), progress);
         assertTrue(progress.contains("950.00 left"), progress);
@@ -105,7 +106,7 @@ class BudgetAndGoalToolsTest {
     void aGoalCanStartWithMoneyThatIsAlreadyPutBy() {
         assertTrue(planning.createGoal("Cofrinho", new BigDecimal("800"), null, null, new BigDecimal("300"))
                 .contains("300"));
-        assertTrue(planning.goalProgress().contains("- Cofrinho: 300.00 of 800.00"));
+        assertTrue(planning.goalProgress(null).contains("- Cofrinho: 300.00 of 800.00"));
 
         // Nothing was set aside, so nothing may show up as a contribution
         assertEquals(0, GoalContribution.count("goal.name", "Cofrinho"));
@@ -120,7 +121,7 @@ class BudgetAndGoalToolsTest {
         planning.contributeToGoal("Fundo", new BigDecimal("100"), "2026-09-01", null);
 
         // Scoped to this goal's own line: the listing is global and other tests add goals.
-        String fundoLine = planning.goalProgress().lines()
+        String fundoLine = planning.goalProgress(null).lines()
                 .filter(l -> l.startsWith("- Fundo:"))
                 .findFirst().orElseThrow();
         assertTrue(fundoLine.contains("100.00 of 100.00"), fundoLine);
@@ -130,6 +131,53 @@ class BudgetAndGoalToolsTest {
         String deleted = planning.deleteGoal("Fundo");
         assertTrue(deleted.contains("1 contributions"), deleted);
         assertTrue(planning.deleteGoal("Fundo").startsWith("ERROR"));
+    }
+
+    /**
+     * Done with a goal from the chat: it leaves the progress listing, keeps
+     * its numbers for when they are asked for, and can be brought back.
+     */
+    @Test
+    void aFinishedGoalIsArchivedFromTheChat() {
+        planning.createGoal("Anos da Sofia", new BigDecimal("250"), null, null, null);
+        planning.contributeToGoal("Anos da Sofia", new BigDecimal("250"), "2027-11-02", null);
+        context.open(Source.WHATSAPP, "wamid.ARCH1", "festa");
+        assertTrue(finance.recordTransaction(new BigDecimal("200"), TransactionType.EXPENSE, "festa", null,
+                "2027-11-20", "Anos da Sofia").contains("paid out of 'Anos da Sofia'"));
+
+        String archived = planning.archiveGoal("Anos da Sofia");
+        assertTrue(archived.startsWith("Archived 'Anos da Sofia'"), archived);
+        assertTrue(archived.contains("reached on"), archived);
+        assertTrue(archived.contains("still holds 50.00"), archived);
+        assertTrue(planning.archiveGoal("Anos da Sofia").contains("already archived"));
+
+        assertFalse(planning.goalProgress(null).contains("Anos da Sofia"));
+        String sofiaLine = planning.goalProgress(true).lines()
+                .filter(l -> l.startsWith("- Anos da Sofia:"))
+                .findFirst().orElseThrow();
+        assertTrue(sofiaLine.contains("target 250.00, 250.00 put in, 200.00 spent from it, 50.00 still in it"), sofiaLine);
+        assertTrue(sofiaLine.contains("reached on"), sofiaLine);
+        assertTrue(sofiaLine.contains("archived on"), sofiaLine);
+
+        // No more money in, and nothing new paid out of it, by name
+        String contribution = planning.contributeToGoal("Anos da Sofia", BigDecimal.TEN, "2027-11-25", null);
+        assertTrue(contribution.startsWith("ERROR") && contribution.contains("archived"), contribution);
+        assertEquals(1, GoalContribution.count("goal.name", "Anos da Sofia"));
+        String spend = finance.recordTransaction(new BigDecimal("20"), TransactionType.EXPENSE, "prenda", null,
+                "2027-11-21", "Anos da Sofia");
+        assertTrue(spend.startsWith("ERROR") && spend.contains("archived"), spend);
+        assertEquals(0, Transaction.count("description", "prenda"));
+
+        assertTrue(planning.createGoal("Anos da Sofia", new BigDecimal("300"), null, null, null).contains("in the archive"));
+
+        assertTrue(planning.unarchiveGoal("Anos da Sofia").contains("back among the active goals"));
+        assertTrue(planning.unarchiveGoal("Anos da Sofia").contains("is not archived"));
+        assertTrue(planning.goalProgress(null).contains("- Anos da Sofia: 50.00 of 250.00"));
+        assertTrue(planning.contributeToGoal("Anos da Sofia", BigDecimal.TEN, "2027-11-25", null).contains("Saved 60.00"));
+
+        assertTrue(planning.archiveGoal("Inexistente").startsWith("ERROR"));
+        assertTrue(planning.unarchiveGoal("Inexistente").startsWith("ERROR"));
+        planning.deleteGoal("Anos da Sofia");
     }
 
     @Test

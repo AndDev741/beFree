@@ -9,9 +9,11 @@ import jakarta.ws.rs.GET;
 import jakarta.ws.rs.NotFoundException;
 import jakarta.ws.rs.PATCH;
 import jakarta.ws.rs.POST;
+import jakarta.ws.rs.PUT;
 import jakarta.ws.rs.Path;
 import jakarta.ws.rs.PathParam;
 import jakarta.ws.rs.Produces;
+import jakarta.ws.rs.QueryParam;
 import jakarta.ws.rs.core.MediaType;
 import org.beFree.auth.CurrentUser;
 import org.beFree.goal.Goal;
@@ -45,17 +47,19 @@ public class GoalResource {
     @ConfigProperty(name = "befree.zone", defaultValue = "Europe/Lisbon")
     String zone;
 
+    /** The goals in play, or with `?archived=true` the ones put away. */
     @GET
     @Transactional
-    public List<Dto.GoalView> list() {
+    public List<Dto.GoalView> list(@QueryParam("archived") boolean archived) {
         LocalDate today = LocalDate.now(ZoneId.of(zone));
-        return goals.progress().stream().map(p -> view(p, today)).toList();
+        return (archived ? goals.archive() : goals.progress()).stream().map(p -> view(p, today)).toList();
     }
 
     static Dto.GoalView view(GoalService.Progress p, LocalDate today) {
         return new Dto.GoalView(p.goal().id, p.goal().name, p.goal().description, p.goal().target,
                 p.goal().targetDate, p.goal().initialAmount, p.saved(), p.spent(), p.remaining(),
-                p.percent(), p.reached(), p.goal().achievedOn, p.monthsLeft(today), p.perMonth(today));
+                p.percent(), p.reached(), p.goal().achievedOn, p.goal().archivedOn,
+                p.monthsLeft(today), p.perMonth(today));
     }
 
     /** What was already in the jar. Rejected above the target, which is always a typo. */
@@ -156,10 +160,44 @@ public class GoalResource {
             throw new BadRequestException("amount must be a non-zero, plausible value");
         }
         LocalDate today = LocalDate.now(ZoneId.of(zone));
-        goals.contribute(goal, req.amount().setScale(2, RoundingMode.HALF_UP),
-                req.occurredOn() != null ? req.occurredOn() : today,
-                req.note() == null || req.note().isBlank() ? null : req.note().trim());
+        try {
+            goals.contribute(goal, req.amount().setScale(2, RoundingMode.HALF_UP),
+                    req.occurredOn() != null ? req.occurredOn() : today,
+                    req.note() == null || req.note().isBlank() ? null : req.note().trim());
+        } catch (IllegalArgumentException e) {
+            throw new BadRequestException(e.getMessage());
+        }
         return view(new GoalService.Progress(goal, goals.saved(goal)), today);
+    }
+
+    /**
+     * Puts a goal away, reached or not. It leaves the active list and stops
+     * asking for money, and everything it held or paid for stays on record.
+     * Archiving it again keeps the day it was first archived.
+     */
+    @PUT
+    @Path("/{id}/archive")
+    @Transactional
+    public Dto.GoalView archive(@PathParam("id") long id) {
+        return setArchived(id, true);
+    }
+
+    /** Undoes an archive: the goal is back in play, contributions and all. */
+    @DELETE
+    @Path("/{id}/archive")
+    @Transactional
+    public Dto.GoalView unarchive(@PathParam("id") long id) {
+        return setArchived(id, false);
+    }
+
+    private Dto.GoalView setArchived(long id, boolean archived) {
+        Goal goal = Goal.findById(id);
+        if (goal == null) {
+            throw new NotFoundException("goal " + id + " not found");
+        }
+        goals.archived(goal, archived);
+        return view(new GoalService.Progress(goal, goals.saved(goal), goals.spent(goal)),
+                LocalDate.now(ZoneId.of(zone)));
     }
 
     @DELETE

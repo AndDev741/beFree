@@ -44,7 +44,7 @@ public final class Dto {
 
     public record GoalView(Long id, String name, String description, BigDecimal target, LocalDate targetDate,
                            BigDecimal initial, BigDecimal saved, BigDecimal spent, BigDecimal remaining,
-                           Integer percent, boolean reached, LocalDate achievedOn,
+                           Integer percent, boolean reached, LocalDate achievedOn, LocalDate archivedOn,
                            Long monthsLeft, BigDecimal perMonth) {
     }
 

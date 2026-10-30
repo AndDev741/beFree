@@ -9,6 +9,7 @@ import org.junit.jupiter.api.Test;
 import java.util.Map;
 
 import static io.restassured.RestAssured.given;
+import static org.hamcrest.Matchers.hasSize;
 import static org.hamcrest.Matchers.is;
 import static org.hamcrest.Matchers.notNullValue;
 import static org.hamcrest.Matchers.nullValue;
@@ -110,6 +111,59 @@ class ApiIT {
                 .when().get("/api/summary?month=2027-02").then()
                 .body("spent", is(250.00f))
                 .body("spentFromGoals", is(0));
+    }
+
+    /**
+     * Archive and unarchive against the packaged binary, where Jackson only
+     * serialises the body types it was told about at build time.
+     */
+    @Test
+    void aSpentGoalIsArchivedAndCanComeBack() {
+        String cookie = signIn(PASSWORD);
+
+        Number id = given().cookie("befree-session", cookie)
+                .contentType(ContentType.JSON)
+                .body("{\"name\":\"Aniversario\",\"target\":200,\"initial\":200}")
+                .when().post("/api/goals").then().statusCode(200)
+                .extract().path("id");
+        String path = "/api/goals/%d".formatted(id.longValue());
+
+        given().cookie("befree-session", cookie)
+                .contentType(ContentType.JSON)
+                .body("{\"amount\":180,\"description\":\"festa\",\"occurredOn\":\"2027-10-09\",\"goalId\":%d}"
+                        .formatted(id.longValue()))
+                .when().post("/api/transactions").then().statusCode(201);
+
+        given().cookie("befree-session", cookie)
+                .when().put(path + "/archive").then().statusCode(200)
+                .body("archivedOn", notNullValue())
+                .body("achievedOn", notNullValue())
+                .body("spent", is(180.00f));
+
+        given().cookie("befree-session", cookie)
+                .when().get("/api/goals").then().statusCode(200)
+                .body("findAll { it.name == 'Aniversario' }", hasSize(0));
+        given().cookie("befree-session", cookie)
+                .when().get("/api/goals?archived=true").then().statusCode(200)
+                .body("find { it.name == 'Aniversario' }.saved", is(20.00f))
+                .body("find { it.name == 'Aniversario' }.archivedOn", notNullValue());
+
+        // The jar it paid from is archived, so it pays for nothing new
+        given().cookie("befree-session", cookie)
+                .contentType(ContentType.JSON)
+                .body("{\"amount\":10,\"description\":\"velas\",\"occurredOn\":\"2027-10-10\",\"goalId\":%d}"
+                        .formatted(id.longValue()))
+                .when().post("/api/transactions").then().statusCode(400);
+        given().cookie("befree-session", cookie)
+                .contentType(ContentType.JSON).body("{\"amount\":10}")
+                .when().post(path + "/contributions").then().statusCode(400);
+
+        given().cookie("befree-session", cookie)
+                .when().delete(path + "/archive").then().statusCode(200)
+                .body("archivedOn", nullValue());
+        given().cookie("befree-session", cookie)
+                .when().get("/api/goals").then()
+                .body("find { it.name == 'Aniversario' }.saved", is(20.00f));
     }
 
     @Test

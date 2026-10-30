@@ -91,10 +91,16 @@ public class TransactionResource {
             goal = null;
         }
         if (goal != null) {
+            boolean sameJar = goal.equals(t.goal);
             // The jar's balance already has this row subtracted, so what it is
             // giving back counts towards what it can afford
-            BigDecimal refunded = goal.equals(t.goal) ? t.amount : BigDecimal.ZERO;
+            BigDecimal refunded = sameJar ? t.amount : BigDecimal.ZERO;
             try {
+                // A row the jar already paid for keeps it, archived or not, so
+                // corrections to that row still go through
+                if (!sameJar) {
+                    transactions.checkNotArchived(goal);
+                }
                 transactions.checkJarCovers(goal, amount, refunded);
             } catch (IllegalArgumentException e) {
                 throw new BadRequestException(e.getMessage());

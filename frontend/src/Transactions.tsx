@@ -215,7 +215,7 @@ export function Transactions({ month, revision, onChanged, startDay }: Props) {
                         onChange={(id) => setEditing({ ...editing, categoryId: id })}
                         onCreated={() => categories.reload()}
                       />
-                      {editing.type === 'EXPENSE' && (jars.length > 0 || editing.goalId !== null) && (
+                      {editing.type === 'EXPENSE' && (jars.length > 0 || t.goalId !== null || editing.goalId !== null) && (
                         <select
                           className="input mini"
                           style={{ marginTop: 4 }}
@@ -227,6 +227,10 @@ export function Transactions({ month, revision, onChanged, startDay }: Props) {
                           {(goals.data ?? []).map((g) => (
                             <option key={g.id} value={g.id}>{g.name}</option>
                           ))}
+                          {/* A row an archived jar already paid for keeps showing it */}
+                          {t.goalId !== null && goals.data && !goals.data.some((g) => g.id === t.goalId) && (
+                            <option value={t.goalId}>{t.goal} (arquivado)</option>
+                          )}
                         </select>
                       )}
                     </td>

@@ -143,8 +143,11 @@ public class PlanningTools {
             return "ERROR: target must be a positive, plausible amount";
         }
         String clean = name.trim();
-        if (Goal.findByName(clean).isPresent()) {
-            return "A goal named '" + clean + "' already exists.";
+        var taken = Goal.findByName(clean);
+        if (taken.isPresent()) {
+            return taken.get().archivedOn != null
+                    ? "A goal named '" + clean + "' already exists in the archive. Unarchive it with unarchiveGoal, or pick another name."
+                    : "A goal named '" + clean + "' already exists.";
         }
         Goal goal = new Goal();
         goal.name = clean;
@@ -195,8 +198,12 @@ public class PlanningTools {
         } catch (DateTimeParseException e) {
             return "ERROR: date must be yyyy-MM-dd";
         }
-        goals.contribute(goal.get(), amount.setScale(2, java.math.RoundingMode.HALF_UP), when,
-                note == null || note.isBlank() ? null : note.trim());
+        try {
+            goals.contribute(goal.get(), amount.setScale(2, java.math.RoundingMode.HALF_UP), when,
+                    note == null || note.isBlank() ? null : note.trim());
+        } catch (IllegalArgumentException e) {
+            return "ERROR: " + e.getMessage();
+        }
         BigDecimal saved = goals.saved(goal.get());
         var progress = new GoalService.Progress(goal.get(), saved);
         return "%s %s EUR %s '%s'. Saved %s of %s%s.".formatted(
@@ -206,16 +213,20 @@ public class PlanningTools {
                 progress.percent() == null ? "" : " (" + progress.percent() + "%)");
     }
 
-    @Tool("Progress of every savings goal: saved, target, and what to put aside per month")
+    @Tool("Progress of every savings goal still in play: saved, target, and what to put aside per month. Archived goals are left out unless includeArchived is true")
     @Transactional
-    public String goalProgress() {
-        LOG.info("tool goalProgress()");
+    public String goalProgress(@P("true to also list archived goals, when the user asks about finished or archived ones; otherwise null") Boolean includeArchived) {
+        LOG.infof("tool goalProgress(includeArchived=%s)", includeArchived);
         List<GoalService.Progress> all = goals.progress();
-        if (all.isEmpty()) {
-            return "No goals yet. Use createGoal to start one.";
+        List<GoalService.Progress> archived = Boolean.TRUE.equals(includeArchived) ? goals.archive() : List.of();
+        if (all.isEmpty() && archived.isEmpty()) {
+            long hidden = Goal.count("archivedOn is not null");
+            return hidden == 0
+                    ? "No goals yet. Use createGoal to start one."
+                    : "No active goals. %d archived; call goalProgress with includeArchived to see them.".formatted(hidden);
         }
         LocalDate today = LocalDate.now(ZoneId.of(zone));
-        StringBuilder out = new StringBuilder("Goals (EUR):\n");
+        StringBuilder out = new StringBuilder(all.isEmpty() ? "No active goals.\n" : "Goals (EUR):\n");
         for (GoalService.Progress p : all) {
             out.append("- %s: %s of %s".formatted(p.goal().name, p.saved(), p.goal().target));
             if (p.percent() != null) {
@@ -234,6 +245,24 @@ public class PlanningTools {
             }
             out.append('\n');
         }
+        if (!archived.isEmpty()) {
+            out.append("Archived goals (EUR):\n");
+            for (GoalService.Progress p : archived) {
+                // Report what went in. Once a goal has been spent, its balance
+                // says little about what was saved
+                out.append("- %s: target %s, %s put in".formatted(
+                        p.goal().name, p.goal().target, p.saved().add(p.spent())));
+                if (p.spent().signum() > 0) {
+                    out.append(", %s spent from it".formatted(p.spent()));
+                }
+                if (p.saved().signum() != 0) {
+                    out.append(", %s still in it".formatted(p.saved()));
+                }
+                out.append(p.goal().achievedOn != null ? ", reached on " + p.goal().achievedOn
+                        : p.reached() ? ", reached" : ", not reached");
+                out.append(", archived on ").append(p.goal().archivedOn).append('\n');
+            }
+        }
         return out.toString().trim();
     }
 
@@ -251,6 +280,44 @@ public class PlanningTools {
         return goal.achievedOn != null
                 ? "'%s' is marked as reached on %s. It will not ask for monthly contributions any more.".formatted(goal.name, goal.achievedOn)
                 : "'%s' is back to saving.".formatted(goal.name);
+    }
+
+    @Tool("Archive a savings goal the user is done with, reached or not. It leaves the active goals and stops asking for money, but keeps its contributions and what it paid for. Use this, not deleteGoal, when the user wants to keep a record")
+    @Transactional
+    public String archiveGoal(@P("Existing goal name") String goalName) {
+        LOG.infof("tool archiveGoal(%s)", goalName);
+        var found = Goal.findByName(goalName == null ? "" : goalName.trim());
+        if (found.isEmpty()) {
+            return "ERROR: goal '" + goalName + "' does not exist. Call goalProgress to see the goals.";
+        }
+        Goal goal = found.get();
+        if (goal.archivedOn != null) {
+            return "'%s' was already archived on %s.".formatted(goal.name, goal.archivedOn);
+        }
+        goals.archived(goal, true);
+        BigDecimal left = goals.saved(goal);
+        return "Archived '%s' on %s, %s.%s".formatted(
+                goal.name, goal.archivedOn,
+                goal.achievedOn != null ? "reached on " + goal.achievedOn : "not reached",
+                left.signum() != 0
+                        ? " It still holds %s EUR; to spend it or take it out, unarchive it first.".formatted(left)
+                        : "");
+    }
+
+    @Tool("Bring an archived savings goal back to the active goals, when it was archived by mistake or the user wants to save for it again")
+    @Transactional
+    public String unarchiveGoal(@P("Archived goal name") String goalName) {
+        LOG.infof("tool unarchiveGoal(%s)", goalName);
+        var found = Goal.findByName(goalName == null ? "" : goalName.trim());
+        if (found.isEmpty()) {
+            return "ERROR: goal '" + goalName + "' does not exist. Call goalProgress with includeArchived to see the archived goals.";
+        }
+        Goal goal = found.get();
+        if (goal.archivedOn == null) {
+            return "'%s' is not archived.".formatted(goal.name);
+        }
+        goals.archived(goal, false);
+        return "'%s' is back among the active goals.".formatted(goal.name);
     }
 
     @Tool("Delete a savings goal and its contributions")

@@ -27,7 +27,7 @@ beFree   ✅ #52 3.00 EUR café (Food)
 - **Photos, voice notes and PDFs.** Receipt photos go to a vision model and voice notes to a transcription service, and the assistant treats the result as your message. A PDF statement is summarised first and imported only after you say yes. Rows that already exist, matched by date and amount, are skipped.
 - **One conversation.** WhatsApp and the in-app chat share a thread, so "apaga o último" works from either.
 - **Budgets.** A monthly limit per category, checked against the month's transactions when you ask.
-- **Savings goals.** Money set aside for later, with an opening balance, a target date and the monthly amount to put aside. An expense can come out of a goal's jar and stays out of the month's spending.
+- **Savings goals.** Money set aside for later, with an opening balance, a target date and the monthly amount to put aside. An expense can come out of a goal's jar and stays out of the month's spending. A goal you are done with can be archived: it leaves the active list and keeps its history.
 - **Months that start when yours does.** The month begins on any day from 1 to 28, with an exception for a single month when pay day slips.
 - **Single owner, locked down.** One account with a bcrypt hash and a 14-day session cookie. The WhatsApp webhook checks Meta's HMAC signature, answers only numbers on an allow-list and handles each message once, even when Meta redelivers it.
 

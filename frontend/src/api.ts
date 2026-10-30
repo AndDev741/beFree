@@ -48,6 +48,8 @@ export interface GoalView {
   reached: boolean;
   /** The day it was reached. Set once and kept, so spending it does not undo it. */
   achievedOn: string | null;
+  /** Set once it is put away: out of the active goals, kept as a record. */
+  archivedOn: string | null;
   monthsLeft: number | null;
   perMonth: number | null;
 }
@@ -190,7 +192,10 @@ export const api = {
       method: 'DELETE',
     }),
 
+  /** The goals still in play. Archived ones only come back from archivedGoals. */
   goals: () => request<GoalView[]>('/api/goals'),
+
+  archivedGoals: () => request<GoalView[]>('/api/goals?archived=true'),
 
   createGoal: (body: {
     name: string;
@@ -218,6 +223,10 @@ export const api = {
     request<GoalView>(`/api/goals/${id}/contributions`, { method: 'POST', body: JSON.stringify(body) }),
 
   deleteGoal: (id: number) => request<void>(`/api/goals/${id}`, { method: 'DELETE' }),
+
+  archiveGoal: (id: number) => request<GoalView>(`/api/goals/${id}/archive`, { method: 'PUT' }),
+
+  unarchiveGoal: (id: number) => request<GoalView>(`/api/goals/${id}/archive`, { method: 'DELETE' }),
 
   settings: (month?: string) =>
     request<Settings>(`/api/settings${month ? `?month=${month}` : ''}`),

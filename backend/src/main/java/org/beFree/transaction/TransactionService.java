@@ -79,8 +79,21 @@ public class TransactionService {
         if (type == TransactionType.INCOME) {
             throw new IllegalArgumentException("income cannot come out of a goal; put it in with a contribution");
         }
+        checkNotArchived(goal);
         checkJarCovers(goal, amount, BigDecimal.ZERO);
         return goal;
+    }
+
+    /**
+     * An archived goal is history. Expenses it already paid for keep pointing
+     * at it; a new one waits until the goal is unarchived.
+     */
+    public void checkNotArchived(Goal goal) {
+        if (goal.archivedOn != null) {
+            throw new IllegalArgumentException(
+                    "'%s' is archived, so it pays for nothing new. Unarchive it first, or record this as a normal expense."
+                            .formatted(goal.name));
+        }
     }
 
     /**

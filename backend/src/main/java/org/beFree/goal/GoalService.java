@@ -1,5 +1,6 @@
 package org.beFree.goal;
 
+import io.quarkus.panache.common.Sort;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import org.beFree.auth.CurrentUser;
@@ -60,10 +61,10 @@ public class GoalService {
                     today.withDayOfMonth(1), goal.targetDate.withDayOfMonth(1)));
         }
 
-        /** What to put aside per month to arrive on time; null without a date, and once reached. */
+        /** What to put aside per month to arrive on time; null without a date, once reached, and once archived. */
         public BigDecimal perMonth(LocalDate today) {
             Long months = monthsLeft(today);
-            if (months == null || reached()) {
+            if (months == null || reached() || goal.archivedOn != null) {
                 return null;
             }
             // Due this month (or overdue): the whole remainder is needed now
@@ -73,6 +74,11 @@ public class GoalService {
 
     @Transactional
     public GoalContribution contribute(Goal goal, BigDecimal amount, LocalDate occurredOn, String note) {
+        if (goal.archivedOn != null) {
+            throw new IllegalArgumentException(
+                    "'%s' is archived, so it takes no more money. Unarchive it first to keep saving for it."
+                            .formatted(goal.name));
+        }
         GoalContribution c = new GoalContribution();
         c.goal = goal;
         c.amount = amount;
@@ -104,6 +110,15 @@ public class GoalService {
         goal.achievedOn = achieved ? (goal.achievedOn == null ? LocalDate.now(ZoneId.of(zone)) : goal.achievedOn) : null;
     }
 
+    /**
+     * Into the archive or back out. Archiving twice keeps the first day, the
+     * same way marking a goal reached twice does.
+     */
+    @Transactional
+    public void archived(Goal goal, boolean archived) {
+        goal.archivedOn = archived ? (goal.archivedOn == null ? LocalDate.now(ZoneId.of(zone)) : goal.archivedOn) : null;
+    }
+
     /** The opening balance, plus every contribution, minus what has been spent out of it. */
     @Transactional
     public BigDecimal saved(Goal goal) {
@@ -128,9 +143,20 @@ public class GoalService {
         return goal.initialAmount == null ? BigDecimal.ZERO : goal.initialAmount;
     }
 
+    /** The goals still in play. Archived ones are listed by {@link #archive()}. */
     @Transactional
     public List<Progress> progress() {
-        List<Goal> goals = Goal.listAll(io.quarkus.panache.common.Sort.by("name"));
+        return progressOf(Goal.list("archivedOn is null", Sort.by("name")));
+    }
+
+    /** Archived goals, most recently put away first. */
+    @Transactional
+    public List<Progress> archive() {
+        return progressOf(Goal.list("archivedOn is not null",
+                Sort.descending("archivedOn").and("name")));
+    }
+
+    private List<Progress> progressOf(List<Goal> goals) {
         if (goals.isEmpty()) {
             return List.of();
         }
