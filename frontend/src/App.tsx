@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import {
-  CaretLeft, CaretRight, ChartDonut, ChatCircleDots, Gear,
+  CaretLeft, CaretRight, ChartDonut, ChatCircleDots, Gear, HandCoins,
   Minus, Moon, Receipt, SignOut, Sun, Target, Wallet, X,
 } from '@phosphor-icons/react';
 import {
@@ -13,9 +13,10 @@ import { Dashboard } from './Dashboard';
 import { Transactions } from './Transactions';
 import { Budgets } from './Budgets';
 import { Goals } from './Goals';
+import { Loans } from './Loans';
 import { Assistant } from './Assistant';
 
-export type View = 'dash' | 'tx' | 'budgets' | 'goals';
+export type View = 'dash' | 'tx' | 'budgets' | 'goals' | 'loans';
 
 /** Past the 28th a month would skip February, so the choice stops there. */
 const DAYS = Array.from({ length: 28 }, (_, i) => i + 1);
@@ -25,6 +26,7 @@ const TABS: { id: View; label: string; icon: typeof ChartDonut }[] = [
   { id: 'tx', label: 'Movimentos', icon: Receipt },
   { id: 'budgets', label: 'Orçamentos', icon: Wallet },
   { id: 'goals', label: 'Objetivos', icon: Target },
+  { id: 'loans', label: 'Empréstimos', icon: HandCoins },
 ];
 
 /**
@@ -121,7 +123,8 @@ export function App() {
 
         <span className="grow" />
 
-        {view !== 'goals' && (
+        {/* Goals and loans run across months, so there is no month to pick */}
+        {view !== 'goals' && view !== 'loans' && (
           <div className="monthnav">
             <button className="iconbtn" onClick={() => setMonth(shiftMonth(month, -1))} aria-label="Mês anterior">
               <CaretLeft size={16} weight="bold" />
@@ -223,6 +226,7 @@ export function App() {
           {view === 'tx' && <Transactions {...txProps} />}
           {view === 'budgets' && <Budgets {...props} />}
           {view === 'goals' && <Goals revision={revision} onChanged={changed} />}
+          {view === 'loans' && <Loans revision={revision} onChanged={changed} />}
         </div>
 
         {railOpen && (

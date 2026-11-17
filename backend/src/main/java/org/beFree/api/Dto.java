@@ -3,6 +3,7 @@ package org.beFree.api;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Map;
 
 /** Request and response shapes the SPA speaks. Kept together: they are one contract. */
 public final class Dto {
@@ -46,6 +47,36 @@ public final class Dto {
                            BigDecimal initial, BigDecimal saved, BigDecimal spent, BigDecimal remaining,
                            Integer percent, boolean reached, LocalDate achievedOn, LocalDate archivedOn,
                            Long monthsLeft, BigDecimal perMonth) {
+    }
+
+    /**
+     * A field left out keeps its value on a PATCH. Unlinking the movement needs
+     * its own flag, for the same reason clearing a goal's date does.
+     */
+    public record LoanRequest(String person, String description, BigDecimal amount, String currency,
+                              LocalDate lentOn, Long transactionId, Boolean clearTransaction) {
+    }
+
+    /** Currency left out means the loan's own. */
+    public record RepaymentRequest(BigDecimal amount, String currency, LocalDate occurredOn, String note) {
+    }
+
+    public record CloseRequest(String note) {
+    }
+
+    public record RepaymentView(Long id, BigDecimal amount, String currency, LocalDate occurredOn, String note) {
+    }
+
+    /**
+     * `repaid` and `outstanding` are in the loan's currency. Money that came
+     * back in any other currency is in `otherCurrencies`, unconverted.
+     */
+    public record LoanView(Long id, String person, String description, BigDecimal amount, String currency,
+                           LocalDate lentOn, Long transactionId, String transactionDescription,
+                           BigDecimal repaid, BigDecimal outstanding, Integer percent,
+                           Map<String, BigDecimal> otherCurrencies, String status,
+                           LocalDate settledOn, LocalDate closedOn, String closingNote,
+                           List<RepaymentView> repayments) {
     }
 
     public record CategorySpend(String category, BigDecimal amount) {

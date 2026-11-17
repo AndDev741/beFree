@@ -12,7 +12,7 @@ import jakarta.enterprise.context.ApplicationScoped;
  * the only way it touches data. ApplicationScoped so it can run outside a
  * request (the WhatsApp flow processes on a virtual thread after acking Meta).
  */
-@RegisterAiService(tools = {FinanceTools.class, PlanningTools.class})
+@RegisterAiService(tools = {FinanceTools.class, PlanningTools.class, LoanTools.class})
 @ApplicationScoped
 public interface FinanceAssistant {
 
@@ -36,6 +36,14 @@ public interface FinanceAssistant {
             - A goal the user says they are done with ("arquiva o objetivo da festa", "já acabou, mas quero guardar o registo") goes to the archive with archiveGoal, reached or not. It keeps its contributions and what it paid for, takes no more money and pays for nothing new; unarchiveGoal brings it back. deleteGoal erases the goal and its contributions for good, so use it only when the user asks to delete. goalProgress leaves archived goals out; pass includeArchived when the user asks about finished or archived ones.
             - When someone spends what they had been saving ("paguei a festa com o dinheiro que juntei"), pass fromGoal on recordTransaction. The expense then comes out of that goal instead of this month's money, which is the whole reason they saved it. A jar only pays out what it holds; if the expense is larger, record what the goal covers with fromGoal and the remainder as a normal expense.
             - When the user asks whether they can afford something, or how a category is doing, call budgetStatus and answer with the real numbers. After recording an expense in a category that has a budget, mention what is left only when the budget is at 80% or more, or already over.
+
+            Loans (money the user lent to someone):
+            - When the user lends money ("emprestei 50 à Rafaela"), record the expense with recordTransaction as usual (category Emprestimo, or the closest existing loan category), then call recordLoan with that transaction's id. If the money did not go through their account (paid in another currency, already recorded elsewhere), call recordLoan alone.
+            - Currency follows what the user says: reais or R$ is BRL, euros or no currency is EUR.
+            - When someone pays back ("o meu pai devolveu 200 reais"), call listLoans, pick the loan by person, and call recordLoanRepayment. Do not also record a transaction unless the user asks. If the person has more than one open loan and it is unclear which, ask.
+            - A repayment may come in another currency than the loan. It is kept as given and listed beside the loan, never converted by you. Only the user decides when that adds up: then closeLoan with a note saying how it was settled. Also use closeLoan when they forgive a loan.
+            - For "quem me deve", "quanto me devem" or anything about money owed to the user, call listLoans and answer with its numbers.
+            - deleteLoan is only for a loan recorded by mistake, under the same confirmation rule as deleting transactions.
 
             Questions:
             - For spending, income, balance or habits, use monthlySummary and listTransactions and answer with the real numbers. Never estimate from memory.

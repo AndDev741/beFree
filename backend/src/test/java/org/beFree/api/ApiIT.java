@@ -166,6 +166,47 @@ class ApiIT {
                 .body("find { it.name == 'Aniversario' }.saved", is(20.00f));
     }
 
+    /**
+     * A loan repaid partly in another currency, against the packaged binary:
+     * LoanView carries a list and a map, and Jackson in a native image only
+     * serialises what it was told about at build time.
+     */
+    @Test
+    void aLoanRepaidInReaisIsListedAndClosedByHand() {
+        String cookie = signIn(PASSWORD);
+
+        Number id = given().cookie("befree-session", cookie)
+                .contentType(ContentType.JSON)
+                .body("{\"person\":\"Pai\",\"amount\":652.54,\"lentOn\":\"2026-02-15\",\"description\":\"carro\"}")
+                .when().post("/api/loans").then().statusCode(200)
+                .body("status", is("OPEN"))
+                .extract().path("id");
+        String path = "/api/loans/%d".formatted(id.longValue());
+
+        given().cookie("befree-session", cookie)
+                .contentType(ContentType.JSON).body("{\"amount\":1100,\"currency\":\"BRL\",\"occurredOn\":\"2026-08-01\"}")
+                .when().post(path + "/repayments").then().statusCode(200)
+                .body("otherCurrencies.BRL", is(1100.00f))
+                .body("repayments", hasSize(1))
+                .body("repayments[0].currency", is("BRL"))
+                .body("outstanding", is(652.54f));
+
+        given().cookie("befree-session", cookie)
+                .when().get("/api/loans").then().statusCode(200)
+                .body("find { it.person == 'Pai' }.outstanding", is(652.54f));
+
+        given().cookie("befree-session", cookie)
+                .contentType(ContentType.JSON).body("{\"note\":\"a conversão bateu\"}")
+                .when().put(path + "/close").then().statusCode(200)
+                .body("status", is("CLOSED"));
+
+        given().cookie("befree-session", cookie)
+                .when().get("/api/loans?closed=true").then().statusCode(200)
+                .body("find { it.person == 'Pai' }.closingNote", is("a conversão bateu"));
+        given().cookie("befree-session", cookie)
+                .when().get("/api/loans/untracked").then().statusCode(200);
+    }
+
     @Test
     void signedInTheWholeSurfaceAnswers() {
         String cookie = signIn(PASSWORD);

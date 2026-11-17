@@ -54,6 +54,40 @@ export interface GoalView {
   perMonth: number | null;
 }
 
+export type LoanStatus = 'OPEN' | 'SETTLED' | 'CLOSED';
+
+export interface Repayment {
+  id: number;
+  amount: number;
+  currency: string;
+  occurredOn: string;
+  note: string | null;
+}
+
+export interface LoanView {
+  id: number;
+  person: string;
+  description: string | null;
+  amount: number;
+  currency: string;
+  lentOn: string;
+  /** The expense that paid it out, when it went through the ledger. */
+  transactionId: number | null;
+  transactionDescription: string | null;
+  /** In the loan's own currency. */
+  repaid: number;
+  outstanding: number;
+  percent: number | null;
+  /** Money that came back in other currencies, as it came, never converted. */
+  otherCurrencies: Record<string, number>;
+  /** SETTLED is paid back in full; CLOSED is called done by hand. */
+  status: LoanStatus;
+  settledOn: string | null;
+  closedOn: string | null;
+  closingNote: string | null;
+  repayments: Repayment[];
+}
+
 export interface Summary {
   month: string;
   income: number;
@@ -228,6 +262,49 @@ export const api = {
 
   unarchiveGoal: (id: number) => request<GoalView>(`/api/goals/${id}/archive`, { method: 'DELETE' }),
 
+  /** Still owed. Paid back and closed ones only come back from finishedLoans. */
+  loans: () => request<LoanView[]>('/api/loans'),
+
+  finishedLoans: () => request<LoanView[]>('/api/loans?closed=true'),
+
+  /** Expenses filed as loans that no loan tracks yet. */
+  untrackedLoans: () => request<Transaction[]>('/api/loans/untracked'),
+
+  createLoan: (body: {
+    person: string;
+    amount: number;
+    currency?: string;
+    lentOn?: string;
+    description?: string | null;
+    transactionId?: number | null;
+  }) => request<LoanView>('/api/loans', { method: 'POST', body: JSON.stringify(body) }),
+
+  updateLoan: (
+    id: number,
+    body: Partial<{
+      person: string;
+      amount: number;
+      currency: string;
+      lentOn: string;
+      description: string;
+      transactionId: number;
+      clearTransaction: boolean;
+    }>,
+  ) => request<LoanView>(`/api/loans/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
+
+  deleteLoan: (id: number) => request<void>(`/api/loans/${id}`, { method: 'DELETE' }),
+
+  repayLoan: (id: number, body: { amount: number; currency?: string; occurredOn?: string; note?: string | null }) =>
+    request<LoanView>(`/api/loans/${id}/repayments`, { method: 'POST', body: JSON.stringify(body) }),
+
+  deleteRepayment: (id: number, repaymentId: number) =>
+    request<LoanView>(`/api/loans/${id}/repayments/${repaymentId}`, { method: 'DELETE' }),
+
+  closeLoan: (id: number, note?: string | null) =>
+    request<LoanView>(`/api/loans/${id}/close`, { method: 'PUT', body: JSON.stringify({ note: note ?? null }) }),
+
+  reopenLoan: (id: number) => request<LoanView>(`/api/loans/${id}/close`, { method: 'DELETE' }),
+
   settings: (month?: string) =>
     request<Settings>(`/api/settings${month ? `?month=${month}` : ''}`),
 
@@ -256,6 +333,14 @@ export const api = {
 
 export const eur = (n: number) =>
   n.toLocaleString('pt-PT', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+const SYMBOLS: Record<string, string> = { EUR: '€', BRL: 'R$', USD: 'US$', GBP: '£' };
+
+/** "12,50 €" for euros, "R$ 205,00" for reais: each currency written the way its people write it. */
+export const money = (n: number, currency: string) => {
+  const symbol = SYMBOLS[currency] ?? currency;
+  return currency === 'EUR' ? `${eur(n)} ${symbol}` : `${symbol} ${eur(n)}`;
+};
 
 export const monthKey = (d = new Date()) =>
   `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
